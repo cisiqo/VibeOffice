@@ -274,19 +274,22 @@
   /* ================= content ================= */
   const sameLink = (a, b) => (a === b) || (!!a && !!b && a.url === b.url && a.anchor === b.anchor && a.tip === b.tip);
   const sameRev = (a, b) => (!a && !b) || (!!a && !!b && a.author === b.author && a.date === b.date);
-  function textXML(s, del) {
+  function textXML(s, del, afterCR = false) {
     /* split at characters that need their own elements */
     let out = '';
     let buf = '';
     const tag = del ? 'w:delText' : 'w:t';
-    const flush = () => { if (buf) { out += `<${tag} xml:space="preserve">${X(buf)}</${tag}>`; buf = ''; } };
+    // A literal CR would be normalized to LF when XML is read again.
+    const flush = () => { if (buf) { out += `<${tag} xml:space="preserve">${X(buf).replace(/\r/g, '&#13;')}</${tag}>`; buf = ''; } };
     for (const ch of s) {
       if (ch === '‑') { flush(); out += '<w:noBreakHyphen/>'; }
       else if (ch === '­') { flush(); out += '<w:softHyphen/>'; }
+      else if (ch === '\n' && afterCR) buf += ch; // keep CRLF across formatting/control boundaries too
       else if (ch === '\n') { flush(); out += '<w:br/>'; }
       else if (ch === '\t') { flush(); out += '<w:tab/>'; }
       else if (/[\u0000-\u0008\u000B\u000C\u000E-\u001F￾￿]/.test(ch)) continue;
       else buf += ch;
+      afterCR = ch === '\r';
     }
     flush();
     return out;
@@ -307,9 +310,10 @@
     }
     return inner;
   }
-  function runsXML(p, ctx) {
+  function runsXML(p, ctx, textState = { afterCR: false }) {
     const items = p.runs;
     let out = '';
+    const trackText = it => { if (D.ilen(it)) textState.afterCR = it.t === 'text' && it.text.endsWith('\r'); };
     /* group by hyperlink & revision wrappers */
     let i = 0;
     while (i < items.length) {
@@ -317,11 +321,12 @@
       const original = L.preserve.objectXML(it, 'ac', ctx);
       if (original != null) {
         if (original) out += it.keep.ac.scope === 'run' ? wrapRunGroup(runWrap(it.rPr, original, ctx), it.rPr || {}, ctx) : wrapRunGroup(original, it.keep.ac.wrapper || {}, ctx);
+        trackText(it);
         i++; continue;
       }
       if (it.t === 'sdts') {
         const end = items.findIndex((n, at) => at > i && n.t === 'sdte' && n.key === it.control.key);
-        if (end >= 0) { out += L.preserve.controlXML(it.control, runsXML({ ...p, runs: items.slice(i + 1, end) }, ctx), ctx); i = end + 1; continue; }
+        if (end >= 0) { out += L.preserve.controlXML(it.control, runsXML({ ...p, runs: items.slice(i + 1, end) }, ctx, textState), ctx); i = end + 1; continue; }
       }
       if (it.t === 'sdts' || it.t === 'sdte') { i++; continue; }
       const r = it.rPr || {};
@@ -339,7 +344,7 @@
         }
       }
       let inner = '';
-      for (let k = i; k < j; k++) inner += itemXML(items[k], p, ctx, !!del);
+      for (let k = i; k < j; k++) { inner += itemXML(items[k], p, ctx, !!del, textState.afterCR); trackText(items[k]); }
       /* revision marks sit inside hyperlinks (w:hyperlink may contain w:ins/w:del, not the reverse) */
       out += wrapRunGroup(inner, { link, ins, del }, ctx);
       i = j;
@@ -356,12 +361,12 @@
     const rp = rPrXML(cleanRPr(r), null, ctx);
     return `<w:r>${rp}${content}</w:r>`;
   }
-  function itemXML(it, p, ctx, del) {
+  function itemXML(it, p, ctx, del, afterCR) {
     const r = it.rPr || {};
     const original = L.preserve.objectXML(it, 'opaque', ctx);
     if (original != null) return original ? runWrap(r, original, ctx) : '';
     switch (it.t) {
-      case 'text': return runWrap(r, textXML(it.text, del), ctx);
+      case 'text': return runWrap(r, textXML(it.text, del, afterCR), ctx);
       case 'tab': return runWrap(r, '<w:tab/>', ctx);
       case 'ptab': return runWrap(r, `<w:ptab w:relativeTo="${it.rel || 'margin'}" w:alignment="${it.al || 'left'}" w:leader="${it.leader || 'none'}"/>`, ctx);
       case 'br':

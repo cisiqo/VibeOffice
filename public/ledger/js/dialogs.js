@@ -770,7 +770,7 @@
     const v = s.view;
     const ck = (label, get, set) => ui.check(label, get(), set);
     const viewTab = h('div', { class: 'col' },
-      ui.group('Show', ck('&Startup Task Pane', () => o.taskOpen !== false, (x) => { o.taskOpen = x; }), ck('&Formula bar', () => o.formulaBar !== false, (x) => { o.formulaBar = x; }), ck('St&atus bar', () => o.statusBar !== false, (x) => { o.statusBar = x; })),
+      ui.group('Show', ck('&Startup Task Pane', () => o.taskOpen !== false, (x) => { o.taskOpen = x; }), ck('Task pane f&ollows the selected object', () => o.paneFollows !== false, (x) => { o.paneFollows = x; }), ck('&Formula bar', () => o.formulaBar !== false, (x) => { o.formulaBar = x; }), ck('St&atus bar', () => o.statusBar !== false, (x) => { o.statusBar = x; })),
       ui.group('Comments', ui.radio('opt-cm', '&None', !w._showComments, () => { w._showComments = false; }), ui.radio('opt-cm', 'Comment &indicator only', !w._showComments, () => { w._showComments = false; }), ui.radio('opt-cm', 'Comment && indi&cator', !!w._showComments, () => { w._showComments = true; })),
       ui.group('Window options', h('div', { class: 'opt-cols' },
         ck('Page brea&ks', () => !!s._pages, (x) => { if (x) L.print.computeBreaks(s); else s._pages = null; }), ck('Fo&rmulas', () => !!v.formulas, (x) => { v.formulas = x; }), ck('&Gridlines', () => v.grid !== false, (x) => { v.grid = x; }), ck('Row && column h&eaders', () => v.headings !== false, (x) => { v.headings = x; }),

@@ -1,6 +1,6 @@
 /* VibeOffice — the SmartArt layout engine: a diagram's items (a tree of text) laid out as shapes by one of the
  * built-in layouts. Pure functions in points, with no DOM beyond an optional canvas for measuring text, so
- * the apps draw the result as their own shapes and tools/smartart.test.mjs runs it in Node.
+ * the apps draw the result as their own shapes and tests/smartart.test.mjs runs it in Node.
  *
  *   items  [{ id, text, kids: [items] }]                    the outline the user types in the text pane
  *   SA.layout(id, items, box, opts) → { shapes, layout }   box { x, y, w, h } in points

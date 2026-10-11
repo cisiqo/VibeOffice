@@ -855,7 +855,9 @@
             /* without xml:space="preserve", line breaks from pretty-printed XML (and the indentation around
                them) are dropped at the ends and folded to a space inside; plain spaces are kept, as in Word */
             let tx = c.textContent;
-            if (/[\r\n]/.test(tx) && c.getAttribute('xml:space') !== 'preserve' && c.getAttributeNS('http://www.w3.org/XML/1998/namespace', 'space') !== 'preserve') tx = tx.replace(/^[ \t]*[\r\n][ \t\r\n]*|[ \t\r\n]*[\r\n][ \t]*$/g, '').replace(/[ \t]*[\r\n]+[ \t]*/g, ' ');
+            // XML normalizes source newlines to LF. A surviving CR came from a
+            // character reference (&#13;) and is content, even without xml:space.
+            if (/\n/.test(tx) && c.getAttribute('xml:space') !== 'preserve' && c.getAttributeNS('http://www.w3.org/XML/1998/namespace', 'space') !== 'preserve') tx = tx.split('\r').map(s => s.replace(/^[ \t]*\n[ \t\n]*|[ \t\n]*\n[ \t]*$/g, '').replace(/[ \t]*\n+[ \t]*/g, ' ')).join('\r');
             text(tx);
             break;
           }

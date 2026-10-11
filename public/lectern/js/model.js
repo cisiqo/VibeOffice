@@ -43,6 +43,20 @@
     scheme('#EAF3FA', '#0B2545', '#8DA9C4', '#13315C', '#5FA8D3', '#E07A5F', '#3D5A80', '#98C1D9'),
     scheme('#1B1F2A', '#E6E9F0', '#0E1118', '#7FDBCA', '#4CC9F0', '#F72585', '#B5179E', '#4361EE'),
   ];
+  /* the theme's style matrix (fmtScheme) in the themes Lectern writes, which shapes refer to by index (SmartArt
+     quick styles, PowerPoint's shape styles) in the colour they name: fills 1–3 (solid, a soft and a rich
+     top-to-bottom gradient, as colour changes per stop), line widths 1–3 (pt) and effects 1–3 (drop shadows, pt) */
+  M.FMT = {
+    fills: [null, [[0, [['tint', 78000], ['satMod', 108000]]], [1, []]], [[0, [['tint', 68000], ['satMod', 118000]]], [0.45, []], [1, [['shade', 78000], ['satMod', 112000]]]]],
+    lines: [0.75, 1.5, 2.5],
+    effects: [{ blur: 3, dist: 1, a: 0.28 }, { blur: 6, dist: 2.5, a: 0.3 }, { blur: 10, dist: 4, a: 0.35 }],
+  };
+  /** fill n of the matrix (1–3) in colour c (a hex colour) */
+  M.fmtFill = (n, c, a) => {
+    const g = M.FMT.fills[n - 1];
+    if (!g) return { t: 'solid', c, a: a == null ? 1 : a };
+    return { t: 'grad', stops: g.map(([p, mods]) => ({ p, c: L.color.applyMods(c, mods.map(([name, val]) => ({ name, val }))), a: a == null ? 1 : a })), ang: 90, path: 'lin' };
+  };
 
   /* ---------- helpers for decoration shapes ---------- */
   let decoId = 0;

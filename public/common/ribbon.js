@@ -302,6 +302,58 @@
       if (e.key === 'F1' && e.ctrlKey && !e.altKey && !e.shiftKey) { e.preventDefault(); e.stopPropagation(); RB.collapse(); }
     }, true);
   }
+  /* ---------------------------------------------------------------- tool panels in the task pane
+     The contextual sets about a selected object (Picture Tools, Drawing Tools, …) are also task-pane panels, in
+     every look: the same commands, group by group, in one column. */
+  const specNow = () => spec || (spec = L.ribbonSpec());
+  RB.toolsPanel = function (set) {
+    const box = h('div', { class: 'tp-tools-panel' });
+    for (const tab of set.tabs) for (const g of tab.groups) {
+      const list = h('div', { class: 'tp-tools' });
+      for (const it of g.items) {
+        if (it === '|') continue;
+        const x = typeof it === 'string' ? { cmd: it } : Object.assign({}, it);
+        if (!x.row && x.size !== 'small') x.size = 'medium';
+        list.append(item(x).el);
+      }
+      if (g.launcher) list.append(item({ cmd: g.launcher, size: 'medium' }).el);
+      box.append(h('div', { class: 'tp-sec' }, h('div', { class: 'tp-h', text: g.label }), list));
+    }
+    return box;
+  };
+  /** the open task pane follows the selection: to the panel of the selected object's tool set, and back to the
+      pane it showed before when the object is no longer selected. It never opens the task pane itself (a pane
+      opened by its object, as IntelliArt's text pane, closes again with it), nor switches it when off (o.on) or
+      while the pane covers the document (narrow windows).
+      o = { task: the app's task pane, sets: { setId: true (a tools panel) | paneId (a pane of the app) },
+            on: () => bool, close: () => void (hides the task pane) } */
+  RB.follow = function (o) {
+    const TP = o.task, sets = o.sets;
+    if (!L.ribbonSpec || !TP) return;
+    const pane = (c) => (sets[c.id] === true ? 'tools-' + c.id : sets[c.id]);
+    for (const c of specNow().contextual || []) if (sets[c.id] === true) TP.register({ id: pane(c), title: c.set, hidden: true, render(b) { b.append(RB.toolsPanel(c)); } });
+    const ours = new Set((specNow().contextual || []).filter((c) => sets[c.id]).map(pane));
+    let shown = '', before = null;
+    const follow = (id) => {
+      if ((o.on && !o.on()) || !TP.el || TP.el.hidden || window.innerWidth < 820) return;
+      if (id) {
+        if (TP.current === id) return;
+        if (!ours.has(TP.current)) before = { pane: TP.current, hidden: false };   // a pane chosen since the last refresh
+        TP.show(id);
+        return;
+      }
+      if (!ours.has(TP.current) || !before) return;
+      if (before.hidden && o.close) o.close();
+      else if (before.pane && TP.registry[before.pane] && !ours.has(before.pane)) TP.show(before.pane);
+    };
+    L.bus.on('ui-refresh', () => {
+      const c = (specNow().contextual || []).find((x) => sets[x.id] && x.when());
+      const id = c ? pane(c) : '';
+      if (id !== shown) { shown = id; follow(id); }
+      /* the task pane as it is while no object is selected: where to go back to */
+      if (!id) before = { pane: TP.current, hidden: !TP.el || TP.el.hidden };
+    });
+  };
   /** after the app's toolbars exist; the ribbon is built the first time a ribbon look is in use */
   RB.init = function () {
     if (!L.ribbonSpec) return;

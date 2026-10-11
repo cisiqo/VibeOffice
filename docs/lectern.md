@@ -24,10 +24,11 @@ Open https://vibeoffice.work/lectern/ (to run it locally, see [testing.md](testi
 | `js/chart-draw.js` | Drawing of charts that come from PowerPoint 2007 and later (see *Charts* below) |
 | `../common/ui.js`, `../common/search.js`, `../common/icons.js`, `../common/clipart.js`, `../common/looks.css`, `../common/ui.css` | Menus, command bars, combo boxes, dialogs, color pickers, tooltips, Search commands |
 | `js/ribbon.js`, `../common/ribbon.js` | The Paper 2016 look's ribbon: PowerPoint's tabs and groups over Lectern's commands ([suite.md](suite.md#the-ribbon)) |
+| `../common/scout/` | Scout, the assistant: Help ▸ Show the Assistant ([suite.md](suite.md#the-assistant-scout)) |
 | `js/editor.js` | Slide editing surface: select, move, resize, rotate, crop, draw, grid |
 | `js/textedit.js` | Rich text editing, bullets, levels, AutoCorrect, tables |
 | `js/dialogs.js` | Font, Bullets, Format AutoShape, Fill Effects, Header & Footer, Options (with Security), etc. |
-| `js/panes.js` | Slides/Outline tab, notes, sorter, notes page, print preview, task panes |
+| `js/panes.js` | Slides/Outline tab, notes, sorter, notes page, print preview, task panes (while open, the selected object's Picture, Drawing, Table or LettersArt Tools; docs/suite.md) |
 | `js/slideshow.js` | Full-screen show, 58 transitions, 50+ entrance/emphasis/exit/motion-path effects, pen, rehearse timings |
 | `js/preserve.js` | Package ownership and settings merges; model-attached media, playback, property invalidation and clipboard dependencies |
 | `js/comments.js` | Legacy/modern comment ownership, author dependencies, copied identities and anchors |
@@ -38,7 +39,7 @@ Open https://vibeoffice.work/lectern/ (to run it locally, see [testing.md](testi
 | `js/commands.js` | Every menu/toolbar command |
 | `js/app.js` | Application wiring, keyboard shortcuts, clipboard, sample deck |
 | `js/templates.js` | Content templates (Project Status Report, Team Meeting, Lesson, Event Announcement) for the Start Center and File ▸ New |
-| `tools/lectern/test/` | The real-file test harness described below |
+| `tests/lectern/` | The real-file test harness described below |
 
 ## Opening
 
@@ -62,7 +63,7 @@ A chart that is not edited in Lectern is saved exactly as it came: its XML, the 
 
 ## IntelliArt (SmartArt)
 
-IntelliArt is Lectern's name for its diagrams; in the file they are Office SmartArt. Insert ▸ Diagram (IntelliArt on the ribbon, or the diagram icon of a content placeholder) opens a gallery of 26 layouts by category, each pictured in the design's colours:
+IntelliArt is Lectern's name for its diagrams; in the file they are Office SmartArt. Progress with PowerPoint and what is left: [smartart.md](smartart.md). Insert ▸ Diagram (IntelliArt on the ribbon, or the diagram icon of a content placeholder) opens a gallery of 26 layouts by category, each pictured in the design's colours:
 
 | Category | Layouts |
 |---|---|
@@ -75,17 +76,19 @@ IntelliArt is Lectern's name for its diagrams; in the file they are Office Smart
 | Pyramid | Basic Pyramid, Inverted Pyramid, Pyramid List |
  The new diagram takes an empty content placeholder, or the middle of the slide.
 
-* **Text pane** (opens on insert; Text Pane on the Diagram toolbar or IntelliArt Tools ▸ Design): one line per item. Enter adds an item, Tab and Shift+Tab demote and promote it, Alt+Shift+↑/↓ move it, Backspace on an empty line removes it; the diagram follows as you type. Text typed into a shape on the slide goes back to its item too.
-* **Diagram toolbar / IntelliArt Tools:** Add Shape (after, before, above, below), Promote, Demote, Move Up, Move Down, Change Layout (keeps the text), Change Colors (one accent, Colorful, Gradient Range), Styles (Simple Fill, White Outline, Subtle, Moderate, Intense), Reset Graphic, Convert to Shapes. Delete on a shape removes its item.
+* **IntelliArt pane** (opens in the sidebar on insert and whenever a diagram becomes selected, and closes again when the diagram is no longer selected if it opened that way; Text Pane on the Diagram toolbar or IntelliArt Tools ▸ Design): the text, one line per item, with Add Shape, Promote, Demote, Move Up and Move Down above it. Enter adds an item, Tab and Shift+Tab demote and promote it, Alt+Shift+↑/↓ move it, Backspace on an empty line removes it; the diagram follows as you type. Text typed into a shape on the slide goes back to its item too. Below the text: the layouts of the same kind (More Layouts… for the gallery), the colours and the styles, each pictured as it would look on this diagram, then Reset Graphic and Convert to Shapes.
+* **Diagram toolbar / IntelliArt Tools:** Add Shape (after, before, above, below), Promote, Demote, Move Up, Move Down, Change Layout (keeps the text), Change Colors, Styles (the same pictured choices as the pane), Reset Graphic, Convert to Shapes. Delete on a shape removes its item.
+* **Colors:** two from the design's theme (Colorful: each item its own accent; and a range from the theme's most vivid accent into a neighbouring hue), then 13 palettes of our own that look the same in every design: ranges from one colour to another item by item (Ocean, Aurora, Lagoon, Midnight, Berry, Sunset, Fire, Amber, Forest, Slate) and a colour per item (Vivid, Jewel, Pastel). They are saved as fixed colours. Accent choices from older files (one accent, its shades, Dark 2) still open and save.
+* **Styles**, in three design languages. *Filled:* Simple Fill, Flat, White Outline, Subtle Effect, Soft Gradient, Moderate Effect, Intense Effect, Lifted, Gloss (flat, soft or rich top-to-bottom gradients, white edges, drop shadows). *Outlined:* Outline, Outline Card (the slide's background inside a coloured edge, text in the item's colour). *Tinted:* Tinted, Tinted Outline (a pale wash of the colour, deep on a dark slide, text in the item's colour). Coloured text is made deeper (or lighter on a dark slide) where it would be faint. Gradients and shadows come from the theme's style matrix, which the themes Lectern writes fill in (`L.model.FMT`), so PowerPoint draws them as Lectern does; a theme from another file keeps its own matrix, which PowerPoint uses for these styles while Lectern draws its own.
 * **Formatting one shape** (fill, outline, font colour, bold, italic, through the usual commands) is kept on its item: it survives Add Shape, a new layout or resizing, is saved in the SmartArt data as PowerPoint stores it (the point's shape properties and text run), and comes back on reopening. Reset Graphic removes it.
-* **Layout:** resizing lays the diagram out again. All items show their text at one size, the largest at which every item fits (with room to spare for applications that draw text wider). Colours are theme slots, so a new design recolours the diagram; accents too close to the slide background are skipped and light fills get dark text.
+* **Layout:** resizing lays the diagram out again. All items show their text at one size, the largest at which every item fits (with room to spare for applications that draw text wider). A new diagram (and Reset Graphic) starts with Moderate Effect (a soft gradient and shadow) in the Ocean palette (cyan into indigo). Theme colours follow a new design or colour scheme: accents too close to the slide background are skipped, and their text takes whichever of the theme's two text colours stands out more from the fill.
 * **Saving:** a diagram made or edited here is saved as real SmartArt: the data (its items), our own layout, style and colour definitions (`urn:vibeoffice.work/diagram/…`, written from our layouts, not copied from Office's), and the drawing of its shapes for applications that do not lay SmartArt out themselves. Model ids are stable, so an unedited diagram saves byte for byte. Reopened in Lectern, it is editable again.
 * **In the sample deck and templates:** the sample's "How we choose a city" is a Funnel; the templates use a Basic Chevron Process (Project Status Report), a Vertical Process agenda (Team Meeting), a Basic Radial (Lesson) and a Basic Timeline (Event Announcement). Decks built in code use `L.diagram.make(pres, slide, placeholder or box, layout, lines)`, where a tab before a line makes it a sub-item.
 * **SmartArt PowerPoint made** in a layout we also have (Office's `default`, `orgChart1`, `hierarchy1`/`2`, `vList2`, `hList1`, `process1`/`2`, `chevron1`, `hProcess11`, `cycle2`/`3`, `radial1`, `venn1`/`3`, `target1`, `funnel1`, `matrix1`, `pyramid1`/`2`/`3`; `OFFICE` in `smartart-io.js`) opens as an editable diagram: its items, colours and style are read from the file, and it is shown and saved exactly as PowerPoint made it until its items are edited here (text pane, typing in a shape, Add Shape, a gallery). From then on it is laid out and saved with our layout of the same name (a toast says so when it happens; the save records the change). Changed only as shapes (moved, a shape recoloured, ungrouped), it is kept or converted as other SmartArt is. Diagrams with picture-filled shapes stay as they came. Each item is one paragraph of plain text here, so an item with several paragraphs is joined into one line when the diagram is first edited, and an org chart's assistants become ordinary members.
 * **Other SmartArt** (layouts we do not have) is shown and kept as before (*Opaque frames*); editing its contents converts it to shapes, with a notice.
-* **Measured on the corpus** (2026-10-10, `tools/lectern/test/smartart-office.py`): of the 43 decks with a mapped layout (50 of their 84 diagrams open editable), every unedited save keeps every diagram part byte-identical; editing one diagram in each (42 decks) gives saves with no new `package.py` findings and no Open XML SDK diagnostics, and each reopens with that diagram editable. LibreOffice draws the edited diagrams.
+* **Measured on the corpus** (2026-10-10, `tests/lectern/smartart-office.py`): of the 43 decks with a mapped layout (50 of their 84 diagrams open editable), every unedited save keeps every diagram part byte-identical; editing one diagram in each (42 decks) gives saves with no new `package.py` findings and no Open XML SDK diagnostics, and each reopens with that diagram editable. LibreOffice draws the edited diagrams.
 
-Checked (2026-10-10): a deck with one diagram per layout (26) passes the Open XML SDK validator and `package.py`; LibreOffice 25.2 draws every one from the saved drawing (upside-down layers are drawn as outlines so their text stays upright); reopened in Lectern all 26 are editable, and editing one rewrites only its parts (the other 25 byte-identical). With the first ten, LibreOffice also re-saved them as SmartArt and Lectern reopened that copy with all ten editable. PowerPoint opened our hand-written process diagram with and without the drawing and edited it (text pane, Add Shape, Change Colors); after Add Shape it laid the boxes out taller than our engine does, which a later PowerPoint check of every layout will settle.
+Checked (2026-10-10): a deck with one diagram per layout (26) passes the Open XML SDK validator and `package.py`; LibreOffice 25.2 draws every one from the saved drawing (upside-down layers are drawn as outlines so their text stays upright); reopened in Lectern all 26 are editable, and editing one rewrites only its parts (the other 25 byte-identical). With the first ten, LibreOffice also re-saved them as SmartArt and Lectern reopened that copy with all ten editable. PowerPoint opened our hand-written process diagram with and without the drawing and edited it (text pane, Add Shape, Change Colors); PowerPoint lays SmartArt out from the definition, never from the saved drawing, so each diagram is saved with a definition that places its shapes where Lectern draws them (progress and the PowerPoint rounds: [smartart.md](smartart.md)).
 
 ## Slide size
 
@@ -109,13 +112,13 @@ user before the download that it will no longer play.
 ## Testing against real presentations
 
 `tools/corpora.sh` pins the LibreOffice, Apache POI and Open XML SDK files used in the current figures
-below. `tools/lectern/test/corpus.js --lossless` exercises save/reopen, actual history operations and
+below. `tests/lectern/corpus.js --lossless` exercises save/reopen, actual history operations and
 suite draft recovery. The rendering mode also rasterizes slides for comparison with LibreOffice;
 `viscompare.py` and `triptych.py` inspect layout differences. Open XML SDK and independent ZIP/XML
 checks compare each output with its original. Earlier broad-corpus results are archived with the
 run history, rather than presented as measurements of the current writer.
 
-The UI/password/chart harnesses remain in `tools/lectern/test/`. Commands, failure accounting and
+The UI/password/chart harnesses remain in `tests/lectern/`. Commands, failure accounting and
 Office review batches are documented in [testing.md](testing.md).
 
 ## What a save keeps, converts and drops

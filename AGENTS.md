@@ -8,7 +8,7 @@ A static web office suite in the style of Office 2003 that opens and saves real 
 | Ledger | `public/ledger/` | Spreadsheet | .xlsx/.xlsm/.xltx/.xltm, CSV/text, XML Spreadsheet 2003, HTML; PDF out |
 | Lectern | `public/lectern/` | Presentations | .pptx/.pptm/.ppsx/.ppsm/.potx/.potm; PDF, PNG, HTML out |
 
-Each app is classic `<script>` files (no ES modules) that attach to one global namespace, `window.L` (also `window.Quire` / `window.Ledger` / `window.Lectern`), loaded in the order listed in its `index.html`. `public/common/` holds what the apps share: the libraries and the stylesheets (one copy each: core, ui, icons, zip, sha, crypto, geometry, metafile, charts, numfmt, dml, spell engine, clipart, SmartArt layouts, ribbon, search, `looks.css`, `ui.css`), `suite.js` (`window.VO`: launching apps, Recent Files, the service worker) and the proofing dictionaries (`common/dict/`). See docs/suite.md.
+Each app is classic `<script>` files (no ES modules) that attach to one global namespace, `window.L` (also `window.Quire` / `window.Ledger` / `window.Lectern`), loaded in the order listed in its `index.html`. `public/common/` holds what the apps share: the libraries and the stylesheets (one copy each: core, ui, icons, zip, sha, crypto, geometry, metafile, charts, numfmt, dml, spell engine, clipart, SmartArt layouts, ribbon, search, `looks.css`, `ui.css`), the assistant (Scout, `common/scout/`), `suite.js` (`window.VO`: launching apps, Recent Files, the service worker) and the proofing dictionaries (`common/dict/`). See docs/suite.md.
 
 ## Docs
 
@@ -18,8 +18,10 @@ Each app is classic `<script>` files (no ES modules) that attach to one global n
 | [docs/ledger.md](docs/ledger.md) | Ledger: features, formulas and calculation, compatibility results, source layout |
 | [docs/lectern.md](docs/lectern.md) | Lectern: source layout, opening, saving, known limits |
 | [docs/suite.md](docs/suite.md) | Start Center, `common/suite.js` (app launch, Recent Files), PWA manifest, service worker |
+| [docs/desktop.md](docs/desktop.md) | Desktop app (Tauri; Windows with mingw, Linux): host interface (`VO.host`), building, MSI and file types, CI, size, to do |
 | [docs/testing.md](docs/testing.md) | Test workflow and tools |
 | [docs/LOSSLESS_SAVE.md](docs/LOSSLESS_SAVE.md) | Same-format save: design summary, what was done, working rules, to do |
+| [docs/smartart.md](docs/smartart.md) | IntelliArt (SmartArt): how PowerPoint draws our definitions, what was learned, to do |
 
 Keep them current: a change to an app's features, formats or source layout updates its `docs/<app>.md`. No per-app READMEs. User-facing docs (README, `docs/<app>.md`) send people to https://vibeoffice.work; running it locally on 127.0.0.1 belongs in docs/testing.md. Screenshots for public docs show no local recent files or drafts (close the task panes).
 
@@ -32,8 +34,8 @@ Keep them current: a change to an app's features, formats or source layout updat
 - Compatibility is measured against files other people wrote (public test corpora), compared with outside references (the page or cell values the authoring application stored, LibreOffice, openpyxl, python-pptx), and the result is written down in the app's doc with numbers.
 - Saved files must open in the authoring application's newer versions and in LibreOffice; what an app cannot edit it keeps and writes back unchanged.
 - Follow the [Preservation contracts](docs/suite.md#preservation) for OOXML ownership, identities, edits, history/copy, drafts and loss reporting.
-- Chrome colours come only from the look settings in `public/common/looks.css` (Classic, Paper, Paper 2016; docs/suite.md, Looks), never hard-coded; document content keeps its own colours in every look. A new setting goes into every look (`node --test tools/looks.test.mjs`).
-- A new command also goes into the app's ribbon (`js/ribbon.js`, the Paper 2016 look), where Office 2016 has it (`node --test tools/ribbon.test.mjs`).
+- Chrome colours come only from the look settings in `public/common/looks.css` (Classic, Paper, Paper 2016; docs/suite.md, Looks), never hard-coded; document content keeps its own colours in every look. A new setting goes into every look (`node --test tests/looks.test.mjs`).
+- A new command also goes into the app's ribbon (`js/ribbon.js`, the Paper 2016 look), where Office 2016 has it (`node --test tests/ribbon.test.mjs`).
 - Shared code lives once, in `public/common/`; never copy it into an app. A change there is checked in all three apps (load each, and screenshot what it touches). What stays app-specific goes through the hooks in docs/suite.md (app config, `ui.hooks`, `L.icons.app`, …), not through app names inside common code.
 
 ## Office acceptance (lessons from the slide-6 repair)
@@ -50,18 +52,24 @@ Keep them current: a change to an app's features, formats or source layout updat
 
 - `tools/serve.py`: no-cache server for `public/` on 127.0.0.1:8760.
 - Chromium with CDP at 127.0.0.1:9222. `tools/shot.mjs <page> [steps]` drives a page over CDP, takes screenshots and reports console errors and any request that leaves 127.0.0.1. **Never close the browser's other tabs** (Chromium quits with its last tab).
+- `tools/oss-licenses.py`: regenerates `public/oss-licenses.html` (Open source licenses, linked from About) from the license files in `public/`, the desktop app's direct crates and its DLL; run it after changing a font, a word list or a desktop dependency.
 - `tools/templates.mjs`: regenerates the Start Center's template gallery (`public/common/templates.json` and previews) from the apps; run it after changing a template.
-- `tools/ledger/test/`: Ledger's Node harnesses (unit tests, `.xlsx` round trip, recalculation, CSV) and Playwright UI checks.
-- `tools/lectern/test/`: Lectern's real-deck harness (open, render, save, reopen in Chromium), UI checks for passwords and charts, encrypted-save check (see docs/lectern.md).
+- Tests live in `tests/`, not in `tools/`: `tests/*.test.mjs` (looks, ribbon, search, SmartArt, Scout), `tests/ooxml/`, one folder per app, and `tests/from-issues/N/` for the regression tests of reported issue N.
+- `tests/ledger/`: Ledger's Node harnesses (unit tests, `.xlsx` round trip, recalculation, CSV) and Playwright UI checks.
+- `tests/lectern/`: Lectern's real-deck harness (open, render, save, reopen in Chromium), UI checks for passwords and charts, encrypted-save check (see docs/lectern.md).
 
 ## Working with other sessions
 
 Several agents work in this repository at once. Commit only your own files and hunks (stage hunks when a file also holds someone else's edits); never commit, revert or rewrite another session's uncommitted changes. Leave a finding for the owner in the relevant plan's To do (preservation: docs/LOSSLESS_SAVE.md) instead of fixing inside their in-progress files.
 
+Always work in the repository's own working directory: no git worktrees or subtrees, no copies of the repository to work in.
+
+Don't look up this project's GitHub issues (no `gh`, no fetching issue pages) unless the user pastes an issue URL; then read only that issue.
+
 ## Testing
 
-1. Ledger engine changes: `node --test tools/ledger/test/*.test.js`.
-2. File-format changes: round-trip real files (`node tools/ledger/test/roundtrip.js file.xlsx`) and open the saved file in LibreOffice.
+1. Ledger engine changes: `node --test tests/ledger/*.test.js`.
+2. File-format changes: round-trip real files (`node tests/ledger/roundtrip.js file.xlsx`) and open the saved file in LibreOffice.
 3. Look: `node tools/shot.mjs <app>/` with steps for the change; check every app still loads without console errors or external requests. UI checks pause between steps so the page repaints, as with real input: bursts of synthetic events hid a Ledger scroll bug.
 4. Shared save code (`public/common/opc.js` and the writers) runs on every part of every file: time a change on a large file (a 30 MB sheet) as well as on the corpus. A regex pre-scan or a full parse there costs seconds and gigabytes.
 5. Prefer a focused regression test per fix; run the full corpus once per feature group and before each Office batch, not after every fix.

@@ -371,7 +371,8 @@
     const ctD = 'application/vnd.openxmlformats-officedocument.drawingml.';
     const rel = (name, type) => ctx.rels.add(type, K.relative(ctx.part, name));
     /* each item's shape takes the id of the pres point that shows it, as in PowerPoint's files */
-    IO.dataXML(sh.sa, sh.id, 'rId1');
+    const box = { w: sh.w, h: sh.h, items: sh.sa.items, measure: L.diagram.measurer(design) };
+    IO.dataXML(sh.sa, sh.id, 'rId1', null, box);
     const presOf = IO.lastPres || new Map(), usedPres = new Set();
     const modelId = (k, i) => { const p = k.sa && k.sa.role === 'node' && presOf.get(IO.guid(sh.id + ':' + k.sa.item)); if (p && !usedPres.has(p)) { usedPres.add(p); return p; } return IO.guid(sh.id + ':sp:' + i); };
     const sps = (sh.kids || []).map((k, i) => {
@@ -395,10 +396,10 @@
       spPr: (f.fill ? fillXML(f.fill, ctx, design) : '') + (f.line ? lineXML(f.line, design) : ''),
       rPr: f.color || f.b || f.i ? { attrs: (f.b ? ' b="1"' : '') + (f.i ? ' i="1"' : ''), inner: f.color ? `<a:solidFill>${clr(f.color, 1, design)}</a:solidFill>` : '' } : null,
     });
-    const dm = rel(ctx.addPart('ppt/diagrams', 'data', IO.dataXML(sh.sa, sh.id, dr, fmt), ctD + 'diagramData+xml'), RT('diagramData'));
-    const lo = rel(ctx.addPart('ppt/diagrams', 'layout', IO.layoutXML(sh.sa.layout), ctD + 'diagramLayout+xml'), RT('diagramLayout'));
+    const dm = rel(ctx.addPart('ppt/diagrams', 'data', IO.dataXML(sh.sa, sh.id, dr, fmt, box), ctD + 'diagramData+xml'), RT('diagramData'));
+    const lo = rel(ctx.addPart('ppt/diagrams', 'layout', IO.layoutXML(sh.sa.layout, box), ctD + 'diagramLayout+xml'), RT('diagramLayout'));
     const qs = rel(ctx.addPart('ppt/diagrams', 'quickStyle', IO.styleXML(sh.sa.style), ctD + 'diagramStyle+xml'), RT('diagramQuickStyle'));
-    const cs = rel(ctx.addPart('ppt/diagrams', 'colors', IO.colorsXML(sh.sa.colors, L.diagram.palette(design)), ctD + 'diagramColors+xml'), RT('diagramColors'));
+    const cs = rel(ctx.addPart('ppt/diagrams', 'colors', IO.colorsXML(sh.sa.colors, L.diagram.palette(design), L.diagram.styleLang(sh.sa.style)), ctD + 'diagramColors+xml'), RT('diagramColors'));
     return `<p:graphicFrame><p:nvGraphicFramePr>${cNvPr(id, sh, ctx)}<p:cNvGraphicFramePr/><p:nvPr/></p:nvGraphicFramePr>${xfrm(sh, 'p:xfrm')}<a:graphic><a:graphicData uri="${NS_DGM}"><dgm:relIds xmlns:dgm="${NS_DGM}" r:dm="${dm}" r:lo="${lo}" r:qs="${qs}" r:cs="${cs}"/></a:graphicData></a:graphic></p:graphicFrame>`;
   }
   /** chart XML from the chart model: charts made or edited in Lectern */
@@ -669,9 +670,13 @@
     const fnt = (f) => `<a:latin typeface="${X(f)}"/><a:ea typeface=""/><a:cs typeface=""/>`;
     const ph = '<a:solidFill><a:schemeClr val="phClr"/></a:solidFill>';
     const ln = (w) => `<a:ln w="${w}" cap="flat" cmpd="sng" algn="ctr"><a:solidFill><a:schemeClr val="phClr"/></a:solidFill><a:prstDash val="solid"/></a:ln>`;
+    /* the style matrix of L.model.FMT */
+    const FMT = L.model.FMT;
+    const fills = FMT.fills.map((g) => (!g ? ph : `<a:gradFill rotWithShape="1"><a:gsLst>${g.map(([p, mods]) => `<a:gs pos="${Math.round(p * 100000)}"><a:schemeClr val="phClr">${mods.map(([n, v]) => `<a:${n} val="${v}"/>`).join('')}</a:schemeClr></a:gs>`).join('')}</a:gsLst><a:lin ang="5400000" scaled="0"/></a:gradFill>`)).join('');
+    const effects = FMT.effects.map((e) => `<a:effectStyle><a:effectLst><a:outerShdw blurRad="${emu(e.blur)}" dist="${emu(e.dist)}" dir="5400000" algn="ctr" rotWithShape="0"><a:srgbClr val="000000"><a:alpha val="${Math.round(e.a * 100000)}"/></a:srgbClr></a:outerShdw></a:effectLst></a:effectStyle>`).join('');
     return HEAD + `<a:theme xmlns:a="${NS_A}" name="${X(name || d.name)}"><a:themeElements><a:clrScheme name="${X(d.name)}">${['dk1', 'lt1', 'dk2', 'lt2', 'accent1', 'accent2', 'accent3', 'accent4', 'accent5', 'accent6', 'hlink', 'folHlink'].map(sc).join('')}</a:clrScheme>` +
       `<a:fontScheme name="${X(d.name)}"><a:majorFont>${fnt(d.fonts.major || 'Arial')}</a:majorFont><a:minorFont>${fnt(d.fonts.minor || 'Arial')}</a:minorFont></a:fontScheme>` +
-      `<a:fmtScheme name="Office"><a:fillStyleLst>${ph}${ph}${ph}</a:fillStyleLst><a:lnStyleLst>${ln(9525)}${ln(25400)}${ln(38100)}</a:lnStyleLst><a:effectStyleLst><a:effectStyle><a:effectLst/></a:effectStyle><a:effectStyle><a:effectLst/></a:effectStyle><a:effectStyle><a:effectLst/></a:effectStyle></a:effectStyleLst><a:bgFillStyleLst>${ph}${ph}${ph}</a:bgFillStyleLst></a:fmtScheme>` +
+      `<a:fmtScheme name="Office"><a:fillStyleLst>${fills}</a:fillStyleLst><a:lnStyleLst>${FMT.lines.map((w) => ln(emu(w))).join('')}</a:lnStyleLst><a:effectStyleLst>${effects}</a:effectStyleLst><a:bgFillStyleLst>${ph}${ph}${ph}</a:bgFillStyleLst></a:fmtScheme>` +
       `</a:themeElements><a:objectDefaults/><a:extraClrSchemeLst/></a:theme>`;
   }
   const CLRMAP = '<p:clrMap bg1="lt1" tx1="dk1" bg2="lt2" tx2="dk2" accent1="accent1" accent2="accent2" accent3="accent3" accent4="accent4" accent5="accent5" accent6="accent6" hlink="hlink" folHlink="folHlink"/>';

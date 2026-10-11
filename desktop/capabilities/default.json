@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "The Start Center (main) and the app windows (doc-N); the pages call only the app's own host_* commands",
+  "windows": ["main", "doc-*"],
+  "permissions": ["core:default"]
+}

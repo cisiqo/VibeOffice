@@ -883,7 +883,7 @@
   /* ------------------------------------------------------------ protection */
   G.protectedSheet = () => { const sh = G.sheet(); return !!sh.protection; };
   /** true (and a message) when the sheet is protected against an action; cell edits check locked cells */
-  G.guardProtect = function (allowKey, cellEdit) {
+  G.guardProtect = function (allowKey, cellEdit, editRanges) {
     const sh = G.sheet();
     if (!sh.protection) return false;
     const at = sh.protection.attrs || {};
@@ -891,9 +891,12 @@
     if (cellEdit) {
       const s = G.sel();
       let locked = false;
-      for (const rg of s.ranges) {
-        const rr = O.clip(sh, rg);
-        for (let r = rr.r1; r <= Math.min(rr.r2, rr.r1 + 500); r++) for (let c = rr.c1; c <= Math.min(rr.c2, rr.c1 + 100); c++) { const st = LY.styleOf(sh, r, c, sh.get(r, c)); if (!(st.prot && st.prot.locked === false)) { locked = true; break; } }
+      // Expanding commands pass their actual bounded ranges, including blank cells.
+      for (const rg of editRanges || s.ranges) {
+        const rr = editRanges ? rg : O.clip(sh, rg);
+        const r2 = editRanges ? rr.r2 : Math.min(rr.r2, rr.r1 + 500), c2 = editRanges ? rr.c2 : Math.min(rr.c2, rr.c1 + 100);
+        for (let r = rr.r1; r <= r2 && !locked; r++) for (let c = rr.c1; c <= c2; c++) { const st = LY.styleOf(sh, r, c, sh.get(r, c)); if (!(st.prot && st.prot.locked === false)) { locked = true; break; } }
+        if (locked) break;
       }
       if (!locked) return false;
     }

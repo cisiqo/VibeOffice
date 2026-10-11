@@ -18,7 +18,7 @@
   };
 
   const DEFAULT_OPTS = {
-    statusBar: true, ruler: true, vruler: true, taskOpen: true, startupPane: true, docMap: false, thumbs: false,
+    statusBar: true, ruler: true, vruler: true, taskOpen: true, startupPane: true, paneFollows: true, docMap: false, thumbs: false,
     toolbars: { standard: true, formatting: true, drawing: true, tables: false, reviewing: 'auto', picture: 'auto', outlining: 'auto', headerFooter: 'auto', mailMerge: false, wordart: 'auto' },
     showMarks: false, marks: { tabs: false, spaces: false, para: false, hidden: false, all: false }, textBoundaries: true, fieldShading: 'selected', bookmarks: false,
     smartQuotes: true, autocorrect: true, autoFormat: true, capSentence: true, autoBullets: true, autoNumbers: true, autoBorders: true, autoHeadings: false, autoUrl: true, ordinals: true, fractions: true, dashes: true,
@@ -868,6 +868,7 @@
     const w = pgEl.offsetWidth, hh = pgEl.offsetHeight;
     const clone = pgEl.cloneNode(true);
     clone.style.margin = '0'; clone.style.boxShadow = 'none';
+    for (const e of clone.querySelectorAll('.format-marks, .sectmark, .hbrk')) e.remove();
     for (const e of clone.querySelectorAll('[contenteditable]')) e.removeAttribute('contenteditable');
     let xhtml = new XMLSerializer().serializeToString(clone);
     for (const [u, dd] of map) xhtml = xhtml.split(u).join(dd);
@@ -1253,6 +1254,8 @@
     E.init();
     if (L.rulers) L.rulers.mount(L.$('#hruler'), L.$('#vruler'), L.$('#rcorner'));
     if (L.panes) { L.panes.task.mount(L.$('#taskpane')); L.panes.docmap.mount(L.$('#docmap')); if (L.panes.reviewing) L.panes.reviewing.mount(L.$('#revpane')); }
+    /* the open task pane follows the selected object to its tool set (common/ribbon.js) */
+    if (L.panes) L.ribbonUI.follow({ task: L.panes.task, sets: { picture: true, drawing: true }, on: () => A.opts.paneFollows !== false });
     setupDrop();
     setupSplitters();
     wire();

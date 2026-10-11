@@ -1,0 +1,33 @@
+[package]
+name = "vibeoffice"
+version = "0.1.0"
+description = "VibeOffice for Windows: the suite in public/ in a native window"
+edition = "2021"
+publish = false
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+# Default features minus dynamic-acl: the pages make no IPC calls yet.
+tauri = { version = "2", default-features = false, features = ["wry", "compression", "common-controls-v6"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+# The system's Open, Save and folder dialogs (GTK on Linux, which uses the portals inside Flatpak)
+rfd = { version = "0.17", default-features = false, features = ["gtk3", "common-controls-v6"] }
+
+# ShellExecuteW for links (already built for Tauri, so this adds nothing)
+[target.'cfg(windows)'.dependencies]
+windows = { version = "0.62", features = ["Win32_UI_Shell", "Win32_UI_WindowsAndMessaging"] }
+
+[features]
+# Embed public/ in the exe. `--no-default-features` loads devUrl (tools/serve.py) instead.
+default = ["custom-protocol"]
+custom-protocol = ["tauri/custom-protocol"]
+
+[profile.release]
+opt-level = "z"
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true

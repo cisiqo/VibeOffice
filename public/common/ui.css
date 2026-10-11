@@ -146,6 +146,9 @@ input, select, textarea { font: inherit; color: var(--ink); }
 .tp-btns { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 6px; }
 .tp-note { color: var(--muted); margin: 4px 0; line-height: 1.4; }
 .tp-box { background: var(--surface); border: 1px solid var(--box-line); padding: 4px 6px; margin: 4px 0; }
+/* a tool set's commands in the task pane (common/ribbon.js RB.toolsPanel): one column of toolbar buttons */
+.tp-tools { display: flex; flex-direction: column; align-items: flex-start; gap: 1px; }
+.tp-tools > .tb-btn, .tp-tools > .tb-split { max-width: 100%; }
 .sf-list { background: var(--surface); border: 1px solid var(--box-line); max-height: 340px; overflow: auto; }
 .sf-item { display: flex; align-items: center; justify-content: space-between; gap: 4px; padding: 3px 4px; border: 1px solid transparent; cursor: default; min-height: 22px; overflow: hidden; }
 .sf-item:hover { border-color: var(--hot-border); background: var(--menu-hot); }
@@ -246,6 +249,7 @@ input, select, textarea { font: inherit; color: var(--ink); }
 .about-name { font-weight: bold; font-size: 16px; }
 .about p { margin: 6px 0; line-height: 1.4; }
 .about .about-marks { color: var(--ink-5); font-size: 11px; line-height: 1.35; }
+.about .about-oss { color: var(--pane-link); }
 .preview-box { border: 1px solid var(--field-border); background: var(--surface); display: flex; align-items: center; justify-content: center; overflow: hidden; }
 .font-preview { height: 60px; font-size: 22px; padding: 0 8px; white-space: nowrap; }
 .prev-cap { color: var(--ink-5); text-align: center; font-size: 10px; margin-top: 3px; }
@@ -299,6 +303,7 @@ input, select, textarea { font: inherit; color: var(--ink); }
 .ds-tools { display: flex; gap: 4px; margin-top: 6px; flex-wrap: wrap; }
 .tooltip { position: fixed; z-index: 3000; background: var(--tip-bg); border: 1px solid var(--tip-line); padding: 1px 4px; pointer-events: none; font-size: 11px; white-space: nowrap; box-shadow: 1px 1px 2px var(--tip-shadow-c); }
 .toast { position: fixed; left: 50%; bottom: 60px; transform: translateX(-50%); z-index: 2500; background: var(--tip-bg); border: 1px solid var(--tip-line); padding: 6px 12px; box-shadow: 2px 2px 4px var(--toast-shadow-c); }
+.toast .toast-act { margin-left: 8px; padding: 0; border: 0; background: none; color: var(--tip-link); text-decoration: underline; cursor: pointer; font: inherit; }
 .busy { position: fixed; inset: 0; z-index: 2600; background: var(--busy-veil); display: flex; align-items: center; justify-content: center; cursor: progress; }
 .busy-box { background: var(--dlg); border: 1px solid var(--tb-border); padding: 14px 20px; display: flex; gap: 10px; align-items: center; box-shadow: 3px 3px 8px var(--shadow-c); }
 .busy-spin { width: 16px; height: 16px; border: 2px solid var(--pane-line); border-top-color: var(--pane-link); border-radius: 50%; animation: spin .8s linear infinite; }

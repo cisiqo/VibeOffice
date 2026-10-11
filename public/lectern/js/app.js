@@ -30,7 +30,7 @@
   L.SIZE_LIST = [8, 9, 10, 10.5, 11, 12, 14, 16, 18, 20, 24, 28, 32, 36, 40, 44, 48, 54, 60, 66, 72, 80, 88, 96];
 
   const DEFAULT_OPTS = {
-    startupPane: true, layoutPaneOnNew: true, statusBar: true, ruler: false, showPopup: true, showPopbar: true, endBlack: true,
+    startupPane: true, layoutPaneOnNew: true, paneFollows: true, statusBar: true, ruler: false, showPopup: true, showPopbar: true, endBlack: true,
     smartQuotes: true, autocorrect: true, capSentence: true, spell: true, autoPreview: true, gray: false, bw: false, outlinePlain: false, alignToSlide: false,
     toolbars: { standard: true, formatting: true, drawing: true, outlining: false, picture: 'auto', tables: 'auto', wordart: 'auto', diagram: 'auto' },
     grid: { show: false, snap: true, size: 6 }, leftW: 196, notesH: 92, leftOpen: true, taskOpen: true,
@@ -82,7 +82,7 @@
           'animSchemes', 'customAnim', 'transitionPane', '-', 'hideSlide'],
       },
       { label: '&Window', items: () => [{ label: '&1 ' + A.fileName, checked: () => true, run: () => {} }] },
-      { label: '&Help', items: ['help', 'gettingStarted', '-', 'about'] },
+      { label: '&Help', items: ['help', 'showAssistant', '-', 'gettingStarted', '-', 'about'] },
     ];
     void autoShapeSub;
     const row = L.$('#menurow');
@@ -1978,7 +1978,7 @@ addEventListener('resize',fit);fit();show(0);<\/script></body></html>`], { type:
     /* 6: a SmartArt diagram (js/diagram.js) */
     s = add('text');
     T.setPlain(ph(s, 'title').tx, 'How we choose a city');
-    const fn = L.diagram.make(pres, s, ph(s, 'body'), 'funnel', ['40 markets screened', '12 visited', '5 shortlisted', '4 chosen'], { style: 'subtle' });
+    const fn = L.diagram.make(pres, s, ph(s, 'body'), 'funnel', ['40 markets screened', '12 visited', '5 shortlisted', '4 chosen']);
     s.anims = [{ id: L.uid('a'), sid: fn.id, cls: 'entr', eff: 'fade', start: 'click', dur: 500, delay: 0, by: 'all' }];
     s.trans = { type: 'fade', spd: 'med', click: true, after: null };
     s.notes = 'Each city has to clear foot traffic, rent and a roastery-delivery radius before we visit.';
@@ -2060,6 +2060,8 @@ addEventListener('resize',fit);fit();show(0);<\/script></body></html>`], { type:
     L.panes.left.mount(L.$('#leftpane'));
     L.panes.notes.mount(L.$('#notes'));
     L.panes.task.mount(L.$('#taskpane'));
+    /* the open task pane follows the selected object to its tool set (common/ribbon.js) */
+    L.ribbonUI.follow({ task: L.panes.task, sets: { smartart: 'diagramText', picture: true, drawing: true, table: true, wordart: true }, on: () => A.opts.paneFollows !== false, close: () => A.toggleTask(false) });
     E.mount(L.$('#editorwrap'));
     A.altView = h('div', { id: 'altview', style: 'flex:1;min-width:0;position:relative', hidden: true });
     L.$('#main').insertBefore(A.altView, L.$('#taskpane'));

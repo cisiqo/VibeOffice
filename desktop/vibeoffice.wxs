@@ -1,0 +1,79 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The Windows installer, built on Linux with wixl (msitools) by desktop/build.sh.
+     Variables: Version (yy.m.d of the suite's version, from build.sh), Dist (the folder with vibeoffice.exe), Icon.
+     File types: VibeOffice is added to Open with and to Default apps for each type below; it does not
+     take the type over (Windows asks the user), and uninstalling leaves the other programs' entries. -->
+<Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
+  <Product Id="*" Name="VibeOffice" Language="1033" Version="$(var.Version)" Manufacturer="VibeOffice"
+           UpgradeCode="5F3DCB8A-6B89-4BDD-A40E-3868CDBE55BF">
+    <Package InstallerVersion="500" Compressed="yes" InstallScope="perMachine"
+             Description="VibeOffice $(var.Version)" Comments="Word processor, spreadsheet and presentations" />
+    <MajorUpgrade AllowSameVersionUpgrades="yes" DowngradeErrorMessage="A newer version of VibeOffice is already installed." />
+    <Media Id="1" Cabinet="vibeoffice.cab" EmbedCab="yes" />
+
+    <Icon Id="vibeoffice.ico" SourceFile="$(var.Icon)" />
+    <Property Id="ARPPRODUCTICON" Value="vibeoffice.ico" />
+    <Property Id="ARPURLINFOABOUT" Value="https://vibeoffice.work" />
+
+    <Directory Id="TARGETDIR" Name="SourceDir">
+      <Directory Id="ProgramFiles64Folder">
+        <Directory Id="INSTALLDIR" Name="VibeOffice">
+          <Component Id="App" Guid="6E0F2B11-3C1E-4F7A-9D55-2A9B8E0C4D01" Win64="yes">
+            <File Id="vibeoffice.exe" Source="$(var.Dist)/vibeoffice.exe" KeyPath="yes">
+              <Shortcut Id="StartMenu" Directory="ProgramMenuFolder" Name="VibeOffice"
+                        WorkingDirectory="INSTALLDIR" Icon="vibeoffice.ico" />
+            </File>
+            <File Id="WebView2Loader.dll" Source="$(var.Dist)/WebView2Loader.dll" />
+            <File Id="LICENSE.txt" Source="$(var.Dist)/LICENSE.txt" />
+          </Component>
+
+          <!-- Open with, Default apps -->
+          <Component Id="Registration" Guid="6E0F2B11-3C1E-4F7A-9D55-2A9B8E0C4D02" Win64="yes">
+            <RegistryValue Root="HKLM" Key="Software\VibeOffice\Capabilities" Name="ApplicationName" Type="string" Value="VibeOffice" KeyPath="yes" />
+            <RegistryValue Root="HKLM" Key="Software\VibeOffice\Capabilities" Name="ApplicationDescription" Type="string" Value="Word processor, spreadsheet and presentations" />
+            <RegistryValue Root="HKLM" Key="Software\VibeOffice\Capabilities\FileAssociations" Name=".docx" Type="string" Value="VibeOffice.docx" />
+            <RegistryValue Root="HKLM" Key="Software\VibeOffice\Capabilities\FileAssociations" Name=".xlsx" Type="string" Value="VibeOffice.xlsx" />
+            <RegistryValue Root="HKLM" Key="Software\VibeOffice\Capabilities\FileAssociations" Name=".pptx" Type="string" Value="VibeOffice.pptx" />
+            <RegistryValue Root="HKLM" Key="Software\RegisteredApplications" Name="VibeOffice" Type="string" Value="Software\VibeOffice\Capabilities" />
+            <RegistryValue Root="HKLM" Key="Software\Classes\Applications\vibeoffice.exe" Name="FriendlyAppName" Type="string" Value="VibeOffice" />
+            <RegistryValue Root="HKLM" Key="Software\Classes\Applications\vibeoffice.exe\SupportedTypes" Name=".docx" Type="string" Value="" />
+            <RegistryValue Root="HKLM" Key="Software\Classes\Applications\vibeoffice.exe\SupportedTypes" Name=".xlsx" Type="string" Value="" />
+            <RegistryValue Root="HKLM" Key="Software\Classes\Applications\vibeoffice.exe\SupportedTypes" Name=".pptx" Type="string" Value="" />
+          </Component>
+
+          <!-- One ProgID per type; the extension only lists it under OpenWithProgids -->
+          <Component Id="TypeDocx" Guid="6E0F2B11-3C1E-4F7A-9D55-2A9B8E0C4D03" Win64="yes">
+            <RegistryValue Root="HKLM" Key="Software\Classes\VibeOffice.docx" Type="string" Value="Quire Document" KeyPath="yes" />
+            <RegistryValue Root="HKLM" Key="Software\Classes\VibeOffice.docx" Name="FriendlyTypeName" Type="string" Value="Quire Document" />
+            <RegistryValue Root="HKLM" Key="Software\Classes\VibeOffice.docx\DefaultIcon" Type="string" Value="&quot;[INSTALLDIR]vibeoffice.exe&quot;,0" />
+            <RegistryValue Root="HKLM" Key="Software\Classes\VibeOffice.docx\shell\open\command" Type="string" Value="&quot;[INSTALLDIR]vibeoffice.exe&quot; &quot;%1&quot;" />
+            <RegistryValue Root="HKLM" Key="Software\Classes\.docx\OpenWithProgids" Name="VibeOffice.docx" Type="string" Value="" />
+          </Component>
+          <Component Id="TypeXlsx" Guid="6E0F2B11-3C1E-4F7A-9D55-2A9B8E0C4D04" Win64="yes">
+            <RegistryValue Root="HKLM" Key="Software\Classes\VibeOffice.xlsx" Type="string" Value="Ledger Worksheet" KeyPath="yes" />
+            <RegistryValue Root="HKLM" Key="Software\Classes\VibeOffice.xlsx" Name="FriendlyTypeName" Type="string" Value="Ledger Worksheet" />
+            <RegistryValue Root="HKLM" Key="Software\Classes\VibeOffice.xlsx\DefaultIcon" Type="string" Value="&quot;[INSTALLDIR]vibeoffice.exe&quot;,0" />
+            <RegistryValue Root="HKLM" Key="Software\Classes\VibeOffice.xlsx\shell\open\command" Type="string" Value="&quot;[INSTALLDIR]vibeoffice.exe&quot; &quot;%1&quot;" />
+            <RegistryValue Root="HKLM" Key="Software\Classes\.xlsx\OpenWithProgids" Name="VibeOffice.xlsx" Type="string" Value="" />
+          </Component>
+          <Component Id="TypePptx" Guid="6E0F2B11-3C1E-4F7A-9D55-2A9B8E0C4D05" Win64="yes">
+            <RegistryValue Root="HKLM" Key="Software\Classes\VibeOffice.pptx" Type="string" Value="Lectern Presentation" KeyPath="yes" />
+            <RegistryValue Root="HKLM" Key="Software\Classes\VibeOffice.pptx" Name="FriendlyTypeName" Type="string" Value="Lectern Presentation" />
+            <RegistryValue Root="HKLM" Key="Software\Classes\VibeOffice.pptx\DefaultIcon" Type="string" Value="&quot;[INSTALLDIR]vibeoffice.exe&quot;,0" />
+            <RegistryValue Root="HKLM" Key="Software\Classes\VibeOffice.pptx\shell\open\command" Type="string" Value="&quot;[INSTALLDIR]vibeoffice.exe&quot; &quot;%1&quot;" />
+            <RegistryValue Root="HKLM" Key="Software\Classes\.pptx\OpenWithProgids" Name="VibeOffice.pptx" Type="string" Value="" />
+          </Component>
+        </Directory>
+      </Directory>
+      <Directory Id="ProgramMenuFolder" />
+    </Directory>
+
+    <Feature Id="Main" Title="VibeOffice" Level="1">
+      <ComponentRef Id="App" />
+      <ComponentRef Id="Registration" />
+      <ComponentRef Id="TypeDocx" />
+      <ComponentRef Id="TypeXlsx" />
+      <ComponentRef Id="TypePptx" />
+    </Feature>
+  </Product>
+</Wix>

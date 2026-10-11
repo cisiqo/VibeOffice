@@ -1,6 +1,7 @@
 /* VibeOffice suite services, shared by the start page and the apps (classic script, window.VO).
  *
  * - Which app opens which file (VO.APPS, VO.appFor).
+ * - The host (VO.host): browser or desktop app, the files the system asks us to open.
  * - The service worker (public/sw.js), registered from every page.
  * - Files the start page hands to an app, and the Recent Files list. Both live in IndexedDB
  *   ('vibeoffice', stores 'handoff' and 'recent') in this browser only; nothing is uploaded.
@@ -18,7 +19,20 @@
 (function () {
   'use strict';
   const VO = (window.VO = {});
-  VO.VERSION = 'dev';   // the published copy says YYYY.MM.<commit> (stamped by the sync script)
+  VO.VERSION = 'dev';   // the published copy says v<yyyy>.<mm>.<dd>-<6 hex> (tools/current-tree-version.sh, stamped by the sync script)
+  if (window.__VO_HOST__ && window.__VO_HOST__.appVersion) VO.VERSION = window.__VO_HOST__.appVersion;   // the desktop app's build
+  /** a version's date as a number (20261011), or null for a version without one (dev); copies before
+   *  v<yyyy>.<mm>.<dd>-<hex> said <yyyy>.<mm>.<hex>, day 0 */
+  const versionDay = (v) => {
+    const m = /^v?(\d{4})\.(\d{2})(?:\.(\d{2})-[0-9a-f]{6})?/i.exec(v || '');
+    return m ? +(m[1] + m[2] + (m[3] || '00')) : null;
+  };
+  /** compare two versions by their dates alone: < 0 if a is older than b, 0 for the same day, > 0 if newer;
+   *  a version without a date (dev) is newer than any dated one */
+  VO.compareVersions = (a, b) => {
+    const x = versionDay(a), y = versionDay(b);
+    return x === y ? 0 : x === null ? 1 : y === null ? -1 : Math.sign(x - y);
+  };
   const BASE = new URL('..', document.currentScript.src).href;   // public/
   VO.base = BASE;
 
@@ -47,8 +61,121 @@
     link.href = 'data:image/svg+xml,' + encodeURIComponent(svg);
   };
 
+  /* ------------------------------------------------------------ the host */
+  /** VO.host: the one interface between the pages and what runs them (docs/desktop.md, Host interface).
+   *  kind 'web': a browser tab or the installed PWA; 'desktop': the native app (desktop/), which sets
+   *  window.__VO_HOST__ and answers the host_* commands (desktop/src/host.rs). Pages use VO.host, never
+   *  Tauri's or the system's file APIs directly. */
+  const native = window.__VO_HOST__ && window.__TAURI_INTERNALS__ ? window.__VO_HOST__ : null;
+  const call = (cmd, args) => window.__TAURI_INTERNALS__.invoke(cmd, args);
+  VO.host = {
+    kind: native ? 'desktop' : 'web',
+    platform: native ? native.platform : 'web',
+    version: native ? native.version : 0,
+    /** open a web or mail address in the system's browser: a new tab on the web, the default browser in the
+     *  desktop app (which also sends every link that leaves the app there) */
+    async openUrl(url) {
+      if (native) return call('host_open_url', { url: String(url) });
+      window.open(url, '_blank', 'noopener');
+    },
+    /** the whole UI's scale (1 = 100 %), or null where the page cannot set it (the web: the browser's own
+     *  zoom, Ctrl + and Ctrl −, does it); the desktop app keeps it for the next start */
+    async uiScale() { return native ? call('host_ui_scale') : null; },
+    async setUiScale(scale) { if (native) return call('host_set_ui_scale', { scale: +scale }); },
+    /** open one of the suite's pages in a window of its own: the desktop app makes a full window (host and
+     *  all); the web opens a window or tab, false if the browser blocked it */
+    async newWindow(url) {
+      if (native) { await call('host_new_window', { url: new URL(url, location.href).href }); return true; }
+      return !!window.open(url, '_blank');
+    },
+    /** close this window if it is an app window the suite opened; false for the Start Center's (and on the web) */
+    async closeWindow() { return native ? call('host_close_window') : false; },
+    /** Browse after a save: the Downloads folder, with this window's last saved file selected (desktop) */
+    async showDownloads() { if (native) return call('host_show_downloads'); },
+    /** fn(files) for the files the system asks us to open (Open with, a double-click on an associated
+     *  file, the installed PWA's file handlers); the page that calls this takes them */
+    onFiles(fn) {
+      if (native) {
+        call('host_launch_files').then(async (list) => {
+          if (!list.length) return;
+          fn(await Promise.all(list.map(async (f) => new File([await call('host_read', { handle: f.handle })], f.name))));
+        }).catch((e) => console.error('host:', e));
+      } else if ('launchQueue' in window) {
+        window.launchQueue.setConsumer(async (params) => {
+          if (params.files && params.files.length) fn(await Promise.all(params.files.map((h) => h.getFile())));
+        });
+      }
+    },
+  };
+
+  /* ------------------------------------------------------------ updates */
+  /** updater/current.json on the published site says, per policy and platform, the version an edition must
+   *  be at least: older than "show-update-dialog" asks with a dialog, older than "show-update-button" shows an
+   *  Update button. Versions compare by date (VO.compareVersions); a dev build never asks. The desktop app
+   *  checks when the Start Center opens; nothing about the user or their files is sent. */
+  VO.UPDATES = (native && native.updates) || 'https://vibeoffice.work/updater/current.json';
+  /** updater/whatsnew.json: { "<version>": "<plain text>" }, one list for every platform */
+  VO.WHATSNEW = (native && native.whatsnew) || 'https://vibeoffice.work/updater/whatsnew.json';
+  /** the page the Update button opens (in the system's browser): it gets this edition's version and platform */
+  VO.updateUrl = () => 'https://vibeoffice.work/updater/?from_version=' + encodeURIComponent(VO.VERSION)
+    + '&current_platform=' + encodeURIComponent(VO.host.platform);
+  /** { ask: 'dialog', 'button' or null (up to date), news: [{ version, text }] }: when an update is due, the
+   *  whatsnew.json entries newer than this version, newest first (none if that file cannot be read).
+   *  Throws when current.json cannot be read (offline). */
+  VO.checkUpdate = async () => {
+    const res = await fetch(VO.UPDATES, { cache: 'no-store' });
+    if (!res.ok) throw new Error('updates: HTTP ' + res.status);
+    const policy = (await res.json()) || {};
+    const older = (k) => policy[k] && typeof policy[k][VO.host.platform] === 'string'
+      && VO.compareVersions(VO.VERSION, policy[k][VO.host.platform]) < 0;
+    const ask = older('show-update-dialog') ? 'dialog' : older('show-update-button') ? 'button' : null;
+    let all = {};
+    if (ask) try { const r = await fetch(VO.WHATSNEW, { cache: 'no-store' }); if (r.ok) all = (await r.json()) || {}; } catch (e) { /* the dialog without notes */ }
+    const news = Object.entries(all)
+      .filter(([v, text]) => typeof text === 'string' && versionDay(v) !== null && VO.compareVersions(VO.VERSION, v) < 0)
+      .sort(([a], [b]) => VO.compareVersions(b, a))
+      .map(([version, text]) => ({ version, text }));
+    return { ask, news };
+  };
+
+  /* ------------------------------------------------------------ open source licenses */
+  /** About ▸ Open source licenses: the credits page (made by tools/oss-licenses.py) in a window or tab of its own */
+  VO.LICENSES = BASE + 'oss-licenses.html';
+  VO.showLicenses = () => VO.host.newWindow(VO.LICENSES).catch((e) => console.error('licenses:', e));
+
+  /* ------------------------------------------------------------ fonts on this computer */
+  /** the font families Local Font Access listed (Chrome and Edge, after the user allows it), kept in this
+   *  browser for every app of the suite; the Font boxes show them (L.localFonts in core.js) */
+  const LOCAL_FONTS = 'vibeoffice.localFonts';
+  let localFonts = null;
+  window.addEventListener('storage', (e) => { if (e.key === LOCAL_FONTS || e.key === null) localFonts = null; });
+  VO.localFonts = {
+    supported: () => typeof window.queryLocalFonts === 'function',
+    list() {
+      if (!localFonts) { try { localFonts = JSON.parse(localStorage.getItem(LOCAL_FONTS)) || []; } catch (e) { localFonts = []; } }
+      return localFonts;
+    },
+    /** ask the browser for the list (it asks the user the first time) and keep it; the number of families */
+    async load() {
+      const families = Array.from(new Set((await window.queryLocalFonts()).map((f) => f.family))).sort((x, y) => x.localeCompare(y));
+      localFonts = families;
+      try { localStorage.setItem(LOCAL_FONTS, JSON.stringify(families)); } catch (e) { /* storage off: kept for this page only */ }
+      return families.length;
+    },
+    forget() { localFonts = []; try { localStorage.removeItem(LOCAL_FONTS); } catch (e) { /* storage off */ } },
+  };
+
+  /* Saving, for now: in the desktop app a save is a download into the Downloads folder; the native side says
+     which file it wrote (the name only), and the app shows it with Browse (docs/desktop.md, Saving) */
+  if (native) window.addEventListener('vo-download', (e) => {
+    const ui = window.L && window.L.ui, d = e.detail || {};
+    if (!ui) return;
+    if (d.ok) ui.toast(`Saved to Downloads folder: ${d.name}`, 8000, { label: 'Browse', run: () => VO.host.showDownloads().catch((err) => console.error('browse:', err)) });
+    else ui.toast('The file could not be saved to the Downloads folder.', 8000);
+  });
+
   /* ------------------------------------------------------------ service worker */
-  if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) {
+  if (VO.host.kind === 'web' && 'serviceWorker' in navigator && /^https?:$/.test(location.protocol)) {
     navigator.serviceWorker.register(BASE + 'sw.js').catch((e) => console.warn('service worker:', e.message));
   }
 
@@ -190,21 +317,23 @@
   };
 
   /* ------------------------------------------------------------ handing files to apps */
-  /** where an app page opens: a new window when installed (the start page stays, as in LibreOffice), else this tab */
-  VO.go = (url) => {
+  /** where an app page opens: a new window in the desktop app or when installed (the start page stays, as in
+   *  LibreOffice), else this tab */
+  VO.go = async (url) => {
     const standalone = matchMedia('(display-mode: standalone)').matches || matchMedia('(display-mode: window-controls-overlay)').matches;
-    if (standalone && window.open(url, '_blank')) return;
+    try { if ((VO.host.kind === 'desktop' || standalone) && await VO.host.newWindow(url)) return; } catch (e) { console.error('new window:', e); }
     location.href = url;
   };
   /** File ▸ Exit, after the app has closed its documents: an app window the Start Center opened
    * (installed) closes and shows the Start Center behind it; a tab goes to the Start Center */
-  VO.exit = () => {
+  VO.exit = async () => {
     if (VO.wopi && VO.wopi.active && window.parent !== window) {
       if (VO.wopi.info.ClosePostMessage === true) {
         window.parent.postMessage(JSON.stringify({ MessageId: 'UI_Close', SendTime: Date.now(), Values: {} }), VO.wopi.info.PostMessageOrigin);
       }
       return;
     }
+    if (await VO.host.closeWindow().catch(() => false)) return;   // the desktop app's app windows
     if (window.opener && !window.opener.closed) { window.close(); if (window.closed) return; }
     location.href = BASE;
   };

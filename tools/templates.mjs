@@ -56,6 +56,7 @@ const JPEG = `(async () => { const b = await VO.thumbnail(); if (!b) return null
 let failed = false;
 try {
   for (const d of ['Page', 'Runtime']) await send(`${d}.enable`);
+  await send('Emulation.setAutomationOverride', { enabled: true });   // no assistant coming in (navigator.webdriver)
   await send('Emulation.setDeviceMetricsOverride', { width: 1280, height: 800, deviceScaleFactor: 1, mobile: false });
   const out = {};
   for (const [app, blankName] of Object.entries(APPS)) {

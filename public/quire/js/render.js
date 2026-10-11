@@ -317,7 +317,7 @@
       br.className = 'fill';
       pc.appendChild(br);
       if (!firstText) { pc.style.fontFamily = L.fontStack(markR.font).replace(/"/g, "'"); pc.style.fontSize = R.px(markR.sz || 12) + 'px'; if (!ls.exact && !ls.atLeast) pc.style.lineHeight = gridPx ? gridLine(markR) + 'px' : L.round(R.lineFactor(markR.font) * ls.mult, 4); }
-    } else if (lastEl && lastEl.nodeName === 'BR' && !lastEl.classList.contains('fill')) {
+    } else if (lastEl && (lastEl.nodeName === 'BR' && !lastEl.classList.contains('fill') || lastEl.firstChild?.nodeType === 3 && /\n$/.test(lastEl.firstChild.data))) {
       const br = document.createElement('br');
       br.className = 'fill';
       pc.appendChild(br);
@@ -460,7 +460,18 @@
       if (r.link || rp.link) cls.push('lnk');
       let el;
       if (it.t === 'text') {
-        const text = it.text.slice(a - s, b - s);
+        // Keep one DOM character per model character for caret/selection offsets.
+        // Chromium ignores CR in a Text node; LF produces the intended line break.
+        const text = it.text.slice(a - s, b - s).replace(/\r/g, (_, at) => {
+          let next = it.text[a - s + at + 1];
+          if (next == null) for (let j = idx + 1; j < items.length; j++) {
+            const other = items[j];
+            if (!D.ilen(other)) continue;
+            const props = other.rPr || {}, visible = !(props.del && markup === 'final' || props.ins && markup === 'original') && (!D.rProps(d, p, other, tctx).hidden || ctx.showHidden);
+            next = other.t === 'text' && visible ? other.text[0] : ''; break;
+          }
+          return next === '\n' ? '\u200b' : '\n';
+        });
         /* Word does not let a run of spaces in a larger font raise the line: draw it at the line's
            text size and keep its width with letter spacing */
         if (/^ +$/.test(text) && r.sz && !r.u && !r.highlight && !r.shd) {
@@ -473,30 +484,9 @@
         const css = R.runCSS(r, mult, ctx.dkPara ? { autoWhite: true, key: 'w' } : null) + extra;
         const clsS = cls.join(' ');
         /* merge with the previous span when formatting is identical */
-        if (lastSpan && lastCss === css + '|' + clsS && +lastSpan.dataset.o + +lastSpan.dataset.n === a && !ctx.showMarks) {
+        if (lastSpan && lastCss === css + '|' + clsS && +lastSpan.dataset.o + +lastSpan.dataset.n === a) {
           lastSpan.firstChild.appendData(text);
           lastSpan.dataset.n = +lastSpan.dataset.n + text.length;
-          continue;
-        }
-        if (ctx.showMarks && text.includes(' ')) {
-          /* spaces shown as centred dots: one span per space so widths stay exact */
-          let k = 0;
-          const parts = text.split(/( +)/);
-          for (const part of parts) {
-            if (!part) continue;
-            const sp = document.createElement('span');
-            sp.dataset.o = a + k;
-            sp.dataset.n = part.length;
-            sp.style.cssText = css;
-            if (part[0] === ' ') sp.className = (clsS + ' spc').trim(); else if (clsS) sp.className = clsS;
-            sp.appendChild(document.createTextNode(part));
-            if (r.link || rp.link) sp.dataset.link = linkStr(r.link || rp.link);
-            if (r.noProof) sp.spellcheck = false;
-            controlSpan(sp);
-            pc.appendChild(sp);
-            k += part.length;
-          }
-          lastSpan = null;
           continue;
         }
         el = document.createElement('span');
@@ -528,7 +518,6 @@
           el.dataset.label = it.type === 'page' ? 'Page Break' : 'Column Break';
         } else {
           el = document.createElement('br');
-          if (ctx.showMarks) { const m = document.createElement('span'); m.className = 'lbmark'; m.contentEditable = 'false'; m.dataset.z = a; pc.appendChild(m); }
         }
       } else if ((it.t === 'img' || it.t === 'shape' || it.t === 'group' || it.t === 'chart') && it.float) {
         if (!L.drawing) continue;
@@ -609,6 +598,60 @@
       z.dataset.z = to;
       z.appendChild(document.createTextNode('​'));
       pc.appendChild(z);
+    }
+  };
+  /** Paint marks over measured text, without splitting runs or changing shaping. */
+  R.layoutMarks = function (root, show) {
+    for (const old of root.querySelectorAll('.format-marks')) old.remove();
+    if (!show && !root.querySelector('.p.mdel')) return;
+    // Measure in local, unrotated CSS pixels. Restoring transforms before paint
+    // makes marks follow zoom, rotated text boxes and vertical table cells.
+    const transforms = [];
+    for (const e of [root, ...root.querySelectorAll('[style*="transform"]')]) {
+      const value = e.style.getPropertyValue('transform'), priority = e.style.getPropertyPriority('transform');
+      if (value && value !== 'none') { transforms.push([e, value, priority]); e.style.setProperty('transform', 'none', priority); }
+    }
+    try {
+      const range = document.createRange();
+      for (const p of root.querySelectorAll('.p')) {
+        if (!show && !p.classList.contains('mdel')) continue;
+        const box = p.getBoundingClientRect(), layer = document.createElement('div');
+        layer.className = 'format-marks'; layer.contentEditable = 'false'; layer.setAttribute('aria-hidden', 'true');
+        const pc = p.firstChild, cs = getComputedStyle(pc), rtl = cs.direction === 'rtl', vertical = cs.writingMode !== 'horizontal-tb';
+        layer.style.writingMode = cs.writingMode;
+        const mark = (cls, r) => {
+          if (!r || !r.height) return;
+          const span = document.createElement('span'); span.className = cls;
+          const x = vertical || rtl ? r.left : r.right, y = vertical ? (rtl ? r.top : r.bottom) : r.top;
+          span.style.cssText = `left:${x - box.left - p.clientLeft}px;top:${y - box.top - p.clientTop}px;font-size:${cs.fontSize}`;
+          if (rtl) span.style.transform = vertical ? 'translateY(-100%)' : 'translateX(-100%)';
+          layer.appendChild(span);
+        };
+        for (const br of show ? pc.querySelectorAll(':scope > br:not(.fill)') : []) mark('mark-br', br.getBoundingClientRect());
+        if (p.classList.contains('last')) {
+          range.selectNodeContents(pc);
+          mark('mark-p', Array.from(range.getClientRects()).at(-1));
+        }
+        for (const sp of show ? pc.querySelectorAll(':scope > span[data-o]') : []) {
+          const text = sp.firstChild;
+          if (text?.nodeType !== 3) continue;
+          for (let i = text.data.indexOf('\n'); i >= 0; i = text.data.indexOf('\n', i + 1)) {
+            range.setStart(text, i); range.setEnd(text, i + 1); mark('mark-br', range.getClientRects()[0]);
+          }
+          for (let i = text.data.indexOf(' '); i >= 0; i = text.data.indexOf(' ', i + 1)) {
+            range.setStart(text, i); range.setEnd(text, i + 1);
+            const r = range.getBoundingClientRect();
+            if (!r.width || !r.height) continue;
+            const dot = document.createElement('i');
+            dot.style.left = r.left + r.width / 2 - box.left - p.clientLeft - 1 + 'px';
+            dot.style.top = r.top + r.height * 0.55 - box.top - p.clientTop - 1 + 'px';
+            layer.appendChild(dot);
+          }
+        }
+        if (layer.childNodes.length) p.appendChild(layer);
+      }
+    } finally {
+      for (const [e, value, priority] of transforms) e.style.setProperty('transform', value, priority);
     }
   };
   function linkStr(l) { return typeof l === 'string' ? l : l.url ? l.url + (l.anchor ? '#' + l.anchor : '') : '#' + (l.anchor || ''); }

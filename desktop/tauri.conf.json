@@ -1,0 +1,23 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "VibeOffice",
+  "identifier": "work.vibeoffice.desktop",
+  "build": {
+    "frontendDist": "../public",
+    "devUrl": "http://127.0.0.1:8760/",
+    "removeUnusedCommands": true
+  },
+  "app": {
+    "windows": [],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": false,
+    "icon": [
+      "icons/icon.ico",
+      "icons/icon.png"
+    ]
+  }
+}

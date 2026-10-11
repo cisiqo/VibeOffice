@@ -19,7 +19,7 @@ Drives a page in the Chromium listening on CDP 127.0.0.1:9222 (start one with `c
     node tools/shot.mjs ledger/ '[{"wait":1000,"shot":"ledger.png"}]'
     node tools/shot.mjs quire/ steps.json --w 1440 --h 900 --out /tmp/shots
 
-Each step is `{ "js": "...", "wait": ms, "shot": "name.png|jpg" }`; `js` is an async function body run in the page, and its return value is printed. The app's namespace is `window.L`. At the end the tool lists console errors, exceptions and every request that left 127.0.0.1 (there should be none). It opens and closes its own tab; never close the browser's other tabs.
+Each step is `{ "js": "...", "wait": ms, "shot": "name.png|jpg" }`; `js` is an async function body run in the page, and its return value is printed. The app's namespace is `window.L`. Its pages say they are automated (`navigator.webdriver`), so Scout, the assistant, does not come in by himself; a step that wants him calls `L.assistant.show()` (and sets the setting back at the end, see Looks). At the end the tool lists console errors, exceptions and every request that left 127.0.0.1 (there should be none). It opens and closes its own tab; never close the browser's other tabs.
 
 The install screenshots in the manifest (`public/<app>/preview.jpg`) are 1280×720:
 
@@ -40,39 +40,60 @@ Templates: `node tools/templates.mjs` opens every template (`<app>/?template=<id
 
 ## Looks
 
-`node --test tools/looks.test.mjs` checks `public/common/looks.css`: every look sets every setting, every setting the chrome uses exists, `ui.css` has no colours of its own, and each page picks the look before its stylesheets load. A change to chrome CSS is also checked in every look: the browser profile keeps `localStorage`, so set the look in a step and set it back at the end (other runs would otherwise start in it):
+`node --test tests/looks.test.mjs` checks `public/common/looks.css`: every look sets every setting, every setting the chrome uses exists, `ui.css` has no colours of its own, and each page picks the look before its stylesheets load. A change to chrome CSS is also checked in every look: the browser profile keeps `localStorage`, so set the look in a step and set it back at the end (other runs would otherwise start in it):
 
     node tools/shot.mjs ledger/ '[{"js":"VO.look.set(\"paper\")","wait":800,"shot":"paper.png"},{"js":"VO.look.set(\"classic\")"}]'
 
 Classic must not change when only the theme machinery changes: compare screenshots of the same scenes before and after, pixel for pixel.
 
-`node --test tools/ribbon.test.mjs` loads each app in the Paper 2016 look (through `tools/shot.mjs`, so Chromium must be running) and checks its ribbon: every command id exists, every button has an icon, and every menu command is reachable from the ribbon or File, apart from the exceptions listed in the test. Run it after adding or renaming a command. A ribbon change is also looked at in a narrow window (`--w 900`, where groups fold) and with KeyTips shown (`L.app.menuBar.openIndex(0)`).
+`node --test tests/ribbon.test.mjs` loads each app in the Paper 2016 look (through `tools/shot.mjs`, so Chromium must be running) and checks its ribbon: every command id exists, every button has an icon, and every menu command is reachable from the ribbon or File, apart from the exceptions listed in the test. Run it after adding or renaming a command. A ribbon change is also looked at in a narrow window (`--w 900`, where groups fold) and with KeyTips shown (`L.app.menuBar.openIndex(0)`).
 
-`node --test tools/search.test.mjs` checks Search commands the same way: in each app and both layouts, a table of everyday queries ("image", "margins", "hyperlnk") must find the intended command first, with its location. Add a line there when a query finds the wrong thing.
+`node --test tests/search.test.mjs` checks Search commands the same way: in each app and both layouts, a table of everyday queries ("image", "margins", "hyperlnk") must find the intended command first, with its location. Add a line there when a query finds the wrong thing.
+
+`node --test tests/scout.test.mjs` checks the assistant in each app (docs/suite.md, The assistant): that he comes in by himself on a desktop (waving the first time each day, popping in after) and not on an iPhone or on a day the user hid him (scripts in `tests/scout/` run before the page's own), Help ▸ Show the Assistant (a wave; the introduction and choices the first time each day), a click on him, acting out Print, Find and saving (once the file is written; the test holds back the download), working along with a long wait, the welcome's choices, the right-click menu, no frames drawn while the window is in the background or once he is hidden. Showing or hiding him writes `localStorage['vibeoffice.assistant']`, which other open app pages follow, `scout.lastGreetedDay` and `scout.lastHiddenDay`; a UI check that shows him sets them back at the end, as the test does.
 
 ## SmartArt
 
-`node --test tools/smartart.test.mjs` runs the layout engine (`public/common/smartart.js`) in Node: every layout, for 1 to 7 items, gives finite shapes inside the box, one shape per item it shows, and one text size within the limits. A change to the SmartArt writer (`public/lectern/js/smartart-io.js`, `diagramFrameXML` in `pptx-write.js`) is checked on a deck with one diagram per layout: save it from Lectern, run the Open XML SDK validator and `tools/ooxml/package.py check` on it, convert it with LibreOffice to PDF (does every diagram draw, with no word broken) and to PPTX, and reopen both copies in Lectern (every diagram editable again). Keep the decks and renders in `./tmp`.
+`node --test tests/smartart.test.mjs` runs the layout engine (`public/common/smartart.js`) in Node: every layout, for 1 to 7 items, gives finite shapes inside the box, one shape per item it shows, and one text size within the limits. A change to the SmartArt writer (`public/lectern/js/smartart-io.js`, `diagramFrameXML` in `pptx-write.js`) is checked on a deck with one diagram per layout: save it from Lectern, run the Open XML SDK validator and `tools/ooxml/package.py check` on it, convert it with LibreOffice to PDF (does every diagram draw, with no word broken) and to PPTX, and reopen both copies in Lectern (every diagram editable again). Keep the decks and renders in `./tmp`.
 
-`python3 tools/lectern/test/smartart-office.py OUT [name]` checks SmartArt that PowerPoint made, in the corpus decks whose layouts Lectern has: unedited saves keep every diagram part byte-identical, an edit through the items gives a save with no new `package.py` findings, and that save reopens with the diagram editable (`OUT/results.json`). It removes the Recent Files entries it makes; run the SDK validator on `OUT/*-edited.pptx` too.
+`python3 tests/lectern/smartart-office.py OUT [name]` checks SmartArt that PowerPoint made, in the corpus decks whose layouts Lectern has: unedited saves keep every diagram part byte-identical, an edit through the items gives a save with no new `package.py` findings, and that save reopens with the diagram editable (`OUT/results.json`). It removes the Recent Files entries it makes; run the SDK validator on `OUT/*-edited.pptx` too.
 
-## Quire: tools/quire/test/
+## Quire: tests/quire/
 
 | | |
 |---|---|
-| `node tools/quire/test/mdspec.js DIR` | The Markdown reader against the CommonMark spec examples and the GFM extension examples (in Node). DIR holds `spec.json` (https://spec.commonmark.org/0.31.2/spec.json), cmark-gfm's `test/spec.txt` saved as `gfm-spec.txt`, and the WHATWG `entities.json` |
-| `node tools/quire/test/mdroundtrip.mjs DIR` | Markdown round trips in Quire (through `shot.mjs`): every `.md` in DIR saved unchanged (must be byte for byte the same), with one paragraph edited (only that block may change), and fully rewritten (same HTML). `--spec spec.json` runs the rewrite check on the spec examples |
-| `python3 tools/quire/test/loss-audit.py originals/ saved/ out.json` | What a save loses: each original `.docx` against Quire's saved copy, feature by feature and word by word (standard library only); results in docs/quire.md |
+| `node tests/quire/mdspec.js DIR` | The Markdown reader against the CommonMark spec examples and the GFM extension examples (in Node). DIR holds `spec.json` (https://spec.commonmark.org/0.31.2/spec.json), cmark-gfm's `test/spec.txt` saved as `gfm-spec.txt`, and the WHATWG `entities.json` |
+| `node tests/quire/mdroundtrip.mjs DIR` | Markdown round trips in Quire (through `shot.mjs`): every `.md` in DIR saved unchanged (must be byte for byte the same), with one paragraph edited (only that block may change), and fully rewritten (same HTML). `--spec spec.json` runs the rewrite check on the spec examples |
+| `python3 tests/quire/loss-audit.py originals/ saved/ out.json` | What a save loses: each original `.docx` against Quire's saved copy, feature by feature and word by word (standard library only); results in docs/quire.md |
 
 Run both after a change to `markdown.js` or `mdio.js`; the numbers are in docs/quire.md.
 
-## Ledger: tools/ledger/test/
+## From issues: tests/from-issues/
+
+Regression tests for a reported issue live in `tests/from-issues/N/` (N is the issue number), so a later change that breaks one shows which report it reopens. Each fails on the commit before its fix.
+
+`node tests/from-issues/1/regressions.mjs OUTPUT [fill|fields|marks|breaks]` runs the issue #1 browser regressions (Ledger and Quire)
+in isolated tabs without persistence. It checks Ledger's real Ctrl+D/Ctrl+R events, formulas,
+formatting and undo/redo; Quire's 9/10 and 99/100 page totals, section counts and tab positions;
+unchanged visible-text geometry when toggling marks in Print and Web Layout; and encoded
+carriage returns through edits, history and DOCX save/reopen. It writes screenshots, a JSON report
+and generated DOCX fixtures for independent package/SDK and LibreOffice comparisons. Set `BASE`
+to an isolated previous checkout to demonstrate the failures before a fix.
+
+`node tests/from-issues/1/review.mjs OUTPUT [protection|breaks|pagination|marks|print]` covers the follow-up
+review: locked blank and distant fill destinations; CRLF across formatting, bookmarks and
+inline content controls, including history and save/reopen; centered/right-aligned forced-line
+pagination; mark placement in rotated, RTL and vertical text at 75%, 100% and 150% zoom; and
+identical exported page pixels with marks off/on, plus native print styling.
+Its generated DOCX originals, saves and edits can be compared independently in LibreOffice.
+
+## Ledger: tests/ledger/
 
 The engine and the file readers and writers load in Node through `load.js` (the shared ones from `public/common/`; a missing file is an error), so most checks run without a browser.
 
 | | |
 |---|---|
-| `node --test tools/ledger/test/*.test.js` | Unit tests: calculation, formula parser, number formats, SHA |
+| `node --test tests/ledger/*.test.js` | Unit tests: calculation, formula parser, number formats, SHA |
 | `roundtrip.js file.xlsx [outdir]` | read → write → read, compare every cell's value, formula and style and the sheet settings |
 | `xmlss-rt.js file.xlsx [outdir]` | the same through XML Spreadsheet 2003 |
 | `recalc1.js file.xlsx` | recalculate every formula and compare with the value stored in the file |
@@ -82,7 +103,7 @@ The engine and the file readers and writers load in Node through `load.js` (the 
 | `pool.js script.js dir out.jsonl`, `recalc-all.js`, `summ.js` | run a per-file script over a corpus with a process pool, summarise the results |
 | `ui/*.js` | Playwright checks in Chromium against http://127.0.0.1:8760/ledger/: `smoke`, `flows` (44 end-to-end flows), `allcmds` (every menu and toolbar command), `password`, `perf`, `shots`. Need Playwright (`npm install --no-save playwright`) |
 
-## Lectern: tools/lectern/test/
+## Lectern: tests/lectern/
 
 `corpus.js` opens real decks in Chromium (open, render every slide, save, reopen, compare), `summarize.js` sums up its results, `ui-features.js` drives the password dialog, Tools ▸ Options ▸ Security and the chart dialog, `chartedit.js` writes every chart for validation, `decrypt.py` checks encrypted saves independently, `loss-audit.py` counts what a save loses (features and words, original against saved copy; standard-library Python), `viscompare.py` / `triptych.py` / `stack.py` compare renderings. They need Playwright; how to run them is in docs/lectern.md.
 
@@ -103,16 +124,16 @@ and an error/reason. Here, `ok` means the requested operation and reread complet
 the file was lossless. Independent comparisons and Office acceptance are separate checks.
 
 ```sh
-node tools/quire/test/corpus.mjs ~/corpora/word /tmp/quire.jsonl --save /tmp/lossless/quire
-node tools/ledger/test/corpus.js ~/corpora/excel /tmp/ledger.jsonl --save /tmp/lossless/ledger
-node tools/lectern/test/corpus.js ~/corpora/powerpoint /tmp/lectern.jsonl --lossless --save /tmp/lossless/lectern
+node tests/quire/corpus.mjs ~/corpora/word /tmp/quire.jsonl --save /tmp/lossless/quire
+node tests/ledger/corpus.js ~/corpora/excel /tmp/ledger.jsonl --save /tmp/lossless/ledger
+node tests/lectern/corpus.js ~/corpora/powerpoint /tmp/lectern.jsonl --lossless --save /tmp/lossless/lectern
 ```
 
 Default scenarios are `save` and `repeat` (save, reopen, save again). `--edit` selects separate text,
 formatting, geometry, duplicate and delete-object scenarios, plus row/column/sheet operations in Ledger
 or slide insertion/deletion in Lectern. Each successful mutation also saves its undo and redo states.
 `--scenarios text` runs just text editing; `--scenarios draft` in the browser drivers exercises the app's
-actual snapshot and recovery hooks. For Ledger drafts, use `node tools/ledger/test/browser-corpus.mjs`
+actual snapshot and recovery hooks. For Ledger drafts, use `node tests/ledger/browser-corpus.mjs`
 with the same arguments; the Node engine driver rejects that scenario. `--limit N` limits files; `--resume` skips recorded input hashes and
 scenarios. A single Office file or a file list can replace the directory. Saved artifacts go into
 `save/`, `repeat/`, `repeat-second/`, `text/`, `text-undo/`, etc. Files retain their source extensions so
@@ -120,8 +141,8 @@ variant errors remain observable. The browser drivers use the existing CDP brows
 own tabs. Ledger uses isolated Node workers with a per-file timeout. The older Lectern rendering driver
 without these switches remains available and still requires Playwright.
 
-Quire history regressions run with `node --test tools/quire/test/history.test.js`. The real-file check
-`node tools/quire/test/history.mjs ~/corpora/word/libreoffice__9b899b6707be__chart-size.docx`
+Quire history regressions run with `node --test tests/quire/history.test.js`. The real-file check
+`node tests/quire/history.mjs ~/corpora/word/libreoffice__9b899b6707be__chart-size.docx`
 checks original chart bytes after editing, undo, redo, copying and whole-document snapshot restore.
 
 `tools/ooxml/check.mjs FILE...` uses an independent strict Python XML/ZIP reader to check content types,
@@ -150,7 +171,7 @@ slide-6 repair was such a case); run it with every full corpus run. Open finding
 
 ### Shared preservation core
 
-`node --test tools/ooxml/opc.test.mjs` tests the Node-safe `L.opc` API: immutable bytes, full relationship
+`node --test tests/ooxml/opc.test.mjs` tests the Node-safe `L.opc` API: immutable bytes, full relationship
 types, cyclic/shared graphs, reserved names and IDs, duplicate reference remapping (including GUID
 definitions, shared-person references, copies of copies and unchanged GUID-looking text), namespace/QName
 scope, original nested AlternateContent emitted once, cross-document dependency transport, loss
@@ -208,7 +229,7 @@ parts while keeping opaque dependency bytes. Descendant `Ignorable` declarations
 only `unexpectedIgnorable` declarations fail the measurement. It is a serialization benchmark, not an app round trip;
 use fresh browser saves, package/SDK comparisons and Office samples for integration checks. Run
 `conventions.py` on its output and every full corpus run, recording newly introduced signatures.
-`tools/quire/test/comment-office-copies.py BATCH PREVIOUS_BATCH OUTPUT` recreates the bounded first
+`tests/quire/comment-office-copies.py BATCH PREVIOUS_BATCH OUTPUT` recreates the bounded first
 Word comment-repair isolation round. Package checks now reject excess comment references beyond
 their matching definitions; comparison also rejects automatic pre-release thread-namespace promotion.
 They also reject a shape ID repeated within a PowerPoint VML part or across spreadsheet VML parts (`duplicate-vml-id`), two
@@ -221,25 +242,25 @@ Ledger's `pivots.test.js` and `threads.test.js` use the pinned public inputs (`V
 their source paths for package/SDK comparisons. Pivot source fixtures are generated automatically from
 the pinned input into `PIVOT_RESULTS/fixtures` (or a temporary directory); `PIVOT_FIXTURES` overrides
 that destination. They do not depend on an earlier results directory. The thread test also authors a mention/no-legacy-note
-fixture missing from the public corpus. `node tools/ledger/test/threads-ui.mjs INPUT.xlsx OUTPUT`
+fixture missing from the public corpus. `node tests/ledger/threads-ui.mjs INPUT.xlsx OUTPUT`
 checks the real Paste Special, undo/redo and suite draft/recovery hooks on a thread in the first sheet.
 Add `--edit` to first edit its root through the actual comment editor; replies and untouched mentions
 must survive, including edits around both ends of a mentioned name and later clipboard/draft recovery.
 `objects.test.js` uses `OBJECT_RESULTS=DIR` to retain controls/OLE/VML edit states from the same corpus.
-`node tools/ledger/test/objects-ui.mjs INPUT.xlsx OUTPUT` checks object paste into another workbook,
+`node tests/ledger/objects-ui.mjs INPUT.xlsx OUTPUT` checks object paste into another workbook,
 undo/redo and actual draft recovery, including the dependent payload bytes.
 `sh tools/corpora.sh ~/corpora ledger-features` fetches three supplemental slicer/timeline workbooks
 at fixed commits and SHA-256 hashes without changing the main corpus manifest. `slicers.test.js`
 uses them (`LEDGER_FEATURES` overrides their directory); `SLICER_RESULTS=DIR` retains edit states.
-`node tools/ledger/test/slicers-ui.mjs INPUT.xlsx OUTPUT` exercises real drawing copy/paste, undo/redo
+`node tests/ledger/slicers-ui.mjs INPUT.xlsx OUTPUT` exercises real drawing copy/paste, undo/redo
 and draft recovery. The supplemental sources and hashes are recorded in `ledger-features/manifest.json`.
 `extensions.test.js` uses `EXTENSION_RESULTS=DIR` for extended bars, validation, sparklines and unknown
 worksheet extension edit/history saves (`EXCEL_CORPUS` overrides `~/corpora/excel`).
-`node tools/ledger/test/extensions-ui.mjs INPUT.xlsx OUTPUT` checks an extended bar through edits,
+`node tests/ledger/extensions-ui.mjs INPUT.xlsx OUTPUT` checks an extended bar through edits,
 sheet copy, undo/redo and actual draft recovery.
 `tables.test.js` uses `QUERY_RESULTS=DIR` for query-table edits, column identities, copies and
 history saves (`EXCEL_CORPUS` overrides `~/corpora/excel`).
-`node tools/ledger/test/tables-ui.mjs INPUT.xlsx OUTPUT` checks inserted query columns, sheet
+`node tests/ledger/tables-ui.mjs INPUT.xlsx OUTPUT` checks inserted query columns, sheet
 copy, scoped names, undo/redo and actual draft recovery.
 `recovery.test.js` covers readable cells in damaged packages and unchanged mixed date/text filters.
 `sheet-properties.test.js` uses `SHEET_PROPERTY_RESULTS=DIR` to retain automatic row-height,
@@ -248,11 +269,11 @@ view flags and compatibility alternatives around worksheet-format properties.
 `page-setup.test.js` uses `PAGE_SETUP_RESULTS=DIR` to retain absent-default, paper/quality-edit,
 printer-dependency, chart-sheet, copy and history checks from public workbooks.
 For the independent cell audit after `corpus.js --scenarios text`, set `SCENARIO=text` when running
-`tools/ledger/test/loss-audit.py`: only A1 on the first ordinary worksheet is excluded as the intended
+`tests/ledger/loss-audit.py`: only A1 on the first ordinary worksheet is excluded as the intended
 edit. Dependent array-result recalculation still appears in the report. ZIP directory markers are
 excluded from feature-part counts.
 
-`node tools/ledger/test/scroll-ui.mjs` scrolls a sheet with the mouse wheel in all four directions
+`node tests/ledger/scroll-ui.mjs` scrolls a sheet with the mouse wheel in all four directions
 and with the arrow keys, with and without frozen panes, letting the page repaint between steps.
 
 Build the SDK validator and install the independent workbook reader in a test environment:
@@ -322,46 +343,46 @@ cancellation, download failure, successful acknowledgement, newly introduced not
 entries that must save without the dialog, in all apps.
 Feature inventories decode UTF-16 parts and count retained SmartArt text on both sides.
 
-`node tools/lectern/test/properties.mjs OUTPUT_DIR [SCENARIO_REGEX]` checks per-property edits,
+`node tests/lectern/properties.mjs OUTPUT_DIR [SCENARIO_REGEX]` checks per-property edits,
 tags, actions, transitions, animation changes, clipboard dependencies, undo/redo and actual drafts.
 The corpus driver also records original/opened/saved slide counts so a skipped source slide cannot
 pass merely because the remaining package is valid.
 
-`tools/lectern/test/designs.mjs OUTPUT [SCENARIO_REGEX]` checks imported design edits, independent
+`tests/lectern/designs.mjs OUTPUT [SCENARIO_REGEX]` checks imported design edits, independent
 copies, unused-master retention, history and draft recovery. It checks that unrelated layouts
 retain their exact bytes, theme effects retain their expanded XML, and new layouts allocate unique
 shape IDs including the structural group. It also covers interleaved unread master/layout shapes,
 stacking order, deletion, addition and edited default run properties. Reports follow the same
 package/SDK and LibreOffice comparison workflow.
 
-`node tools/lectern/test/frames.mjs OUTPUT_DIR [SCENARIO_REGEX]` exercises opaque SmartArt, OLE,
+`node tests/lectern/frames.mjs OUTPUT_DIR [SCENARIO_REGEX]` exercises opaque SmartArt, OLE,
 ink, 3-D and chartEx previews with geometry/content edits, copies, deletion, ungrouping, clipboard
 renditions and drafts. Every saved state must have unique VML preview IDs and part animations aimed
 at graphic frames (an embedded object copied twice; edited SmartArt animated by parts). Run
-`python3 tools/lectern/test/frame-fixtures.py FIXTURE_DIR` first for its
+`python3 tests/lectern/frame-fixtures.py FIXTURE_DIR` first for its
 multiple-member fallback case; `FRAME_FIXTURES` overrides the default sibling `frames-fixtures/`
 directory. The fixture is derived from a public SDK chartEx input, with explicit provenance.
 
-`python3 tools/lectern/test/comment-fixtures.py FIXTURE_DIR` creates a documented schema-authored
+`python3 tests/lectern/comment-fixtures.py FIXTURE_DIR` creates a documented schema-authored
 modern thread/task/anchor sample on a pinned public deck; it is not an Office-authored input.
-`node tools/lectern/test/comments.mjs OUTPUT_DIR FIXTURE_DIR [SCENARIO_REGEX]` checks original
+`node tests/lectern/comments.mjs OUTPUT_DIR FIXTURE_DIR [SCENARIO_REGEX]` checks original
 comment bytes, slide/shape ownership, author/index and GUID references, detached clipboard packages,
 Strict copies, undo/redo and suite drafts. Validate its `results.jsonl` using the Microsoft365 target.
 The scenario filter retains other recorded cases so corrections need not repeat unaffected work.
 
-`node tools/lectern/test/membership.mjs OUTPUT_DIR` uses pinned presentation inputs for section and
+`node tests/lectern/membership.mjs OUTPUT_DIR` uses pinned presentation inputs for section and
 custom-show insertion, copy, move, deletion, large IDs, empty sections, undo/redo and actual suite
 draft recovery (`VO_CORPORA` overrides `~/corpora`). It retains every saved state and a draft screenshot.
 Use its `results.jsonl` with `tools/ooxml/validate.py` for package/SDK and LibreOffice comparison.
 
-`node tools/lectern/test/media.mjs FILE_OR_LIST OUTDIR` opens authored video/audio decks in Chromium.
+`node tests/lectern/media.mjs FILE_OR_LIST OUTDIR` opens authored video/audio decks in Chromium.
 It saves unedited, moves/resizes, changes shadow and crop, duplicates, deletes, replaces, duplicates
 the slide, recovers an actual suite draft and copies through keyboard/native clipboard events into
 another tab. Every mutation that uses history emits its pre-edit, undo and redo state.
 
-`python3 tools/lectern/test/media-check.py ORIGINALS OUTDIR` independently compares media frames,
+`python3 tests/lectern/media-check.py ORIGINALS OUTDIR` independently compares media frames,
 bytes, reference targets, playback and exact history restoration (core timestamps excepted).
-`python3 tools/lectern/test/media-check.py --sounds ORIGINALS RESULTS.jsonl SAVED_ROOT` compares
+`python3 tests/lectern/media-check.py --sounds ORIGINALS RESULTS.jsonl SAVED_ROOT` compares
 transition/click sounds and playback through ordinary save/repeat/text/draft corpus scenarios,
 including decks without a media picture. `media-variant.py SOURCE.pptx OUT.pptx` derives an
 AlternateContent/effects fixture from an authored media deck (`--strict` adds a Strict case with an
@@ -388,7 +409,7 @@ inventory parses transition/run-effect elements and text as XML: namespace hoist
 properties and escaped apostrophes must not appear as feature or word loss. Edited SmartArt previews
 are intentional conversions and must be matched with their recorded loss entries.
 
-`python3 tools/ledger/test/pivot-fixtures.py ~/corpora/excel OUTDIR` authors the two pivot source kinds
+`python3 tests/ledger/pivot-fixtures.py ~/corpora/excel OUTDIR` authors the two pivot source kinds
 absent from the pinned inventory: a defined-name source and a two-area consolidation source. It keeps
 all unchanged package parts byte-identical, records source/output hashes and changed parts, and
 requires an empty destination. Consolidation input cells, cached records and displayed output agree.
@@ -397,24 +418,24 @@ edit behavior. Use them alongside the public range, table, external-source and s
 
 ### Quire controls, properties and objects
 
-`node --test tools/quire/test/*.test.js` covers control boundaries and locks, independent property
-replacement, alternatives, range/object identity and history. `node tools/quire/test/controls.mjs
+`node --test tests/quire/*.test.js` covers control boundaries and locks, independent property
+replacement, alternatives, range/object identity and history. `node tests/quire/controls.mjs
 ~/corpora/word OUTDIR` edits authored bound-text, date and checkbox controls, emitting before/edit/undo/
-copy/draft/recovered files. `node tools/quire/test/objects.mjs ~/corpora/word OUTDIR` transfers authored
+copy/draft/recovered files. `node tests/quire/objects.mjs ~/corpora/word OUTDIR` transfers authored
 OLE/SmartArt objects between browser tabs, edits converted content, undoes it and recovers a draft.
-`node tools/quire/test/sections.mjs ~/corpora/word OUTDIR` checks section XML, absent defaults,
+`node tests/quire/sections.mjs ~/corpora/word OUTDIR` checks section XML, absent defaults,
 header relationships and alternatives through actual saves, margin edits, undo/redo and draft recovery.
 Its generated fixture also exercises the page-number dialog, section insertion, page setup/columns
 forward at new and existing boundaries, multi-column index insertion and merged letters. Add
 `--fixture` to run only these focused cases, including copied revision IDs through history and drafts.
 It writes the original and each saved state for package/SDK and external rendering comparisons.
 
-`node tools/quire/test/picture-bullets.mjs ~/corpora/word OUTDIR` exercises the public SDK picture-bullet
+`node tests/quire/picture-bullets.mjs ~/corpora/word OUTDIR` exercises the public SDK picture-bullet
 fixture through the list dialog, symbol conversion, undo/redo, actual draft recovery and an import
 with colliding source IDs. It compares retained definition XML and image bytes and checks unused
 definitions after all list references have been removed.
 
-`node tools/quire/test/numbering.mjs ~/corpora/word OUTDIR` exercises the public custom-format and
+`node tests/quire/numbering.mjs ~/corpora/word OUTDIR` exercises the public custom-format and
 style-linked numbering fixtures through list commands, independent copies, repeated imports,
 undo/redo and actual draft recovery. An optional final `custom` or `style` selects one fixture.
 The loss audit also inventories picture bullets, list identities/templates, legacy settings and
@@ -425,18 +446,18 @@ actual draft recovery.
 
 `tools/ooxml/prescan-bench.mjs` measures the shared writer's identity scan on a generated large sheet
 containing ordinary words such as “del”; it reports elapsed time and heap growth separately from
-whole-file save time. `tools/ooxml/lectern-review.test.mjs` checks chart rotation policy, placeholder
+whole-file save time. `tests/ooxml/lectern-review.test.mjs` checks chart rotation policy, placeholder
 flips, single-member alternative orientation and comment-extension order. The browser harness
-`tools/lectern/test/graphic-rotation.mjs OUTDIR` exercises actual chart/OLE commands and ungrouping.
-`tools/ledger/test/pictures.test.js` checks retained picture properties through geometry/crop edits,
+`tests/lectern/graphic-rotation.mjs OUTDIR` exercises actual chart/OLE commands and ungrouping.
+`tests/ledger/pictures.test.js` checks retained picture properties through geometry/crop edits,
 copying, deletion, history and recovery. The package checker additionally rejects orientation on
 PowerPoint graphic-frame transforms and inconsistent ActiveX worksheet/VML names.
 
-`node tools/quire/test/recovered-breaks.mjs ~/corpora/word OUTDIR` checks the public malformed-break
+`node tests/quire/recovered-breaks.mjs ~/corpora/word OUTDIR` checks the public malformed-break
 fixture through text edits, deletion, undo/redo and actual draft recovery. It verifies valid saved
 break placement and that the Compatibility Checker follows surviving recovered content.
 
-`node tools/quire/test/drawing-properties.mjs ~/corpora/word OUTDIR` checks authored picture/shape
+`node tests/quire/drawing-properties.mjs ~/corpora/word OUTDIR` checks authored picture/shape
 properties and watermarks, plus generated row/cell alternatives with populated and empty choices.
 It writes originals and every edit/history/draft state, checking that deletion cannot restore hidden
 table content and that original watermark elements remain byte-identical before editing.
@@ -456,7 +477,7 @@ variants where available, and writes a manifest. It refuses to replace differing
 Use a new destination for each implementation stage. Record actual Word/Excel/PowerPoint repair
 results; an unperformed Office check remains pending.
 
-`node tools/lectern/test/timing-repair.mjs OUTDIR --sdk PATH_TO_DLL` reproduces the slide-6
+`node tests/lectern/timing-repair.mjs OUTDIR --sdk PATH_TO_DLL` reproduces the slide-6
 diagnostic copies from the current sample. `--source SAVED_SAMPLE.pptx` instead uses the exact bytes
 of a reported failure; `--dotnet PATH` selects the runtime. The output directory must be empty.
 The variants isolate removal of slide-6 timing, its build list, its teeter effect, and ordering of

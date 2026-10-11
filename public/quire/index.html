@@ -6,6 +6,7 @@
 <script>try{var d=document.documentElement,l=localStorage.getItem('vibeoffice.look')||'classic';d.dataset.look=l;d.dataset.layout=l==='paper2016'?'ribbon':'bars'}catch(e){}</script>
 <link rel="stylesheet" href="../common/looks.css">
 <link rel="stylesheet" href="../common/ui.css">
+<link rel="stylesheet" href="../common/scout/scout.css">
 <style>[hidden]{display:none!important}img{max-width:100%}</style>
 <title>Quire 2003</title>
 <meta name="theme-color" content="#2a64c8">
@@ -130,17 +131,19 @@
 .bmk-e::before { content: "]"; color: #7f7f7f; font-weight: bold; }
 .hid { text-decoration: underline dotted #6b6b6b !important; }
 .p.chg::before { content: ""; position: absolute; left: -16px; top: 0; bottom: 0; border-left: 1px solid #000; }
-.p.mdel > .pc::after { content: "¶"; color: #c00000; text-decoration: line-through; }
 .fchg { outline: 1px dotted rgba(80,80,160,.6); }
 /* formatting marks */
-.pages.marks .p.last > .pc::after, .flow.marks .p.last > .pc::after { content: "¶"; color: #3a3a3a; font-family: Arial, Arimo, sans-serif; font-weight: normal; font-style: normal; text-decoration: none; display: inline; }
-.pages.marks .p.last.mdel > .pc::after { color: #c00000; }
 .pages.marks .tb::before { content: "→"; position: absolute; left: 50%; top: -0.85em; transform: translateX(-50%); font: 10px Arial, Arimo, sans-serif; color: #3a3a3a; text-decoration: none; }
-.pages.marks .spc { background: radial-gradient(circle, #3a3a3a 0.9px, transparent 1.2px) center 55% / 100% 100% no-repeat; }
-.pages.marks .lbmark::after { content: "↵"; color: #3a3a3a; font: 0.85em Arial, Arimo, sans-serif; }
+.format-marks { position: absolute; inset: 0; pointer-events: none; user-select: none; }
+.format-marks > i { position: absolute; width: 2px; height: 2px; border-radius: 50%; background: #3a3a3a; }
+.format-marks > span { position: absolute; color: #3a3a3a; font-family: Arial, Arimo, sans-serif; font-weight: normal; font-style: normal; line-height: 1; }
+.format-marks > .mark-p::before { content: "¶"; }
+.format-marks > .mark-br::before { content: "↵"; }
+.p.mdel > .format-marks > .mark-p { color: #c00000; text-decoration: line-through; }
 .pages.marks .hbrk, .flow .hbrk { display: inline-block; width: 100%; text-align: center; font: 10px/14px Arial, Arimo, sans-serif; color: #3a3a3a; border-top: 1px dotted #555; margin-top: 7px; height: 0; overflow: visible; text-indent: 0; }
 .pages.marks .hbrk::after, .flow .hbrk::after { content: attr(data-label); background: #fff; position: relative; top: -8px; padding: 0 4px; }
-.sectmark { display: block; text-align: center; font: 10px/14px Arial, Arimo, sans-serif; color: #3a3a3a; border-top: 3px double #555; margin-top: 8px; height: 0; text-indent: 0; }
+.pages.marks .pg .hbrk { position: absolute; }
+.sectmark { position: absolute; width: 100%; text-align: center; font: 10px/14px Arial, Arimo, sans-serif; color: #3a3a3a; border-top: 3px double #555; margin-top: 8px; height: 0; text-indent: 0; }
 .sectmark::after { content: attr(data-label); background: #fff; position: relative; top: -9px; padding: 0 4px; }
 .flow .p.has-sect::after { content: "Section Break (Next Page)"; display: block; text-align: center; font: 10px/14px Arial, Arimo, sans-serif; color: #3a3a3a; border-top: 3px double #555; margin: 6px 0 4px; height: 0; }
 .flow .p.has-sect .sectmark { display: none; }
@@ -263,7 +266,8 @@ td.csel { background-image: linear-gradient(rgba(10,36,106,.3), rgba(10,36,106,.
   .sizer { width: auto !important; height: auto !important; }
   .pages { position: static; transform: none !important; }
   .pg { box-shadow: none !important; margin: 0 !important; break-after: page; }
-  .crop, .obj-handles, .balloons { display: none !important; }
+  .crop, .obj-handles, .balloons, .format-marks, .sectmark, .hbrk { display: none !important; }
+  .tb::before { content: none !important; }
   .pg-hdr, .pg-ftr { opacity: 1 !important; }
   td.csel { background-image: none !important; }
 }
@@ -390,6 +394,8 @@ body.bluebg .pages .pc, body.bluebg .pages .pc span { color: #fff !important; }
 <script src="js/dialogs2.js"></script>
 <script src="js/dialogs3.js"></script>
 <script src="js/find.js"></script>
+<script src="../common/scout/scout.js"></script>
+<script src="../common/scout/assistant.js"></script>
 <script src="../common/search.js"></script>
 <script src="../common/ribbon.js"></script>
 <script src="js/ribbon.js"></script>

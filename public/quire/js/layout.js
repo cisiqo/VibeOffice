@@ -19,6 +19,8 @@
 
   const el = (tag, cls, css) => { const e = document.createElement(tag); if (cls) e.className = cls; if (css) e.style.cssText = css; return e; };
   const doc = () => D.doc;
+  // Last complete pagination, used while constructing the next pass's fields.
+  let fieldDoc = null, fieldCounts = null;
 
   LY.mount = function (scroller) {
     LY.scroller = scroller;
@@ -157,7 +159,9 @@
         for (let i = 0; i < text.length; i++) {
           const c = text.charCodeAt(i);
           const pc0 = i ? text.charCodeAt(i - 1) : 32;
-          if (i === 0 || pc0 === 32 || pc0 === 45 || pc0 === 47 || pc0 === 0x2014 || pc0 === 0x2013 || c === 32 && false || (i - lastI) >= 24 || i === text.length - 1 || c > 0x2E80) visit(i);
+          // A forced line can start farther right (centered/right-aligned text).
+          if (pc0 === 10) forceNew = true;
+          if (i === 0 || pc0 === 10 || pc0 === 32 || pc0 === 45 || pc0 === 47 || pc0 === 0x2014 || pc0 === 0x2013 || c === 32 && false || (i - lastI) >= 24 || i === text.length - 1 || c > 0x2E80) visit(i);
         }
       } else {
         const r = node.getBoundingClientRect();
@@ -186,6 +190,7 @@
    * returns {st, stop: 'done'|'full'|'page'|'column'}
    */
   LY.flow = function (frame, blocks, st, end, ctx) {
+    if (frame.page) ctx = Object.assign({}, ctx, { dyn: (ty, fmt, instr) => LY.dynField(ty, fmt, frame.page, instr) });
     const scale = LY.scale();
     const d = ctx.doc;
     frame.chain = frame.chain || [];
@@ -482,6 +487,7 @@
   function postPara(frag, p, ctx, frame) {
     if (frag.querySelector('.tb')) {
       const colRect = frame.el.getBoundingClientRect();
+      frag._tabs = { p, ctx, frame };
       R.layoutTabs(frag, p, ctx, colRect.left + (frame.leftPad || 0) * LY.scale(), LY.scale(), frame.width || frame.el.offsetWidth);
     }
     if (L.drawing && (frag.querySelector('.anc') || frag.querySelector('[data-pending]'))) L.drawing.anchorFloats(frag, p, ctx, frame);
@@ -799,8 +805,8 @@
     if (ty === 'STYLEREF') return page.body && page.body.querySelector('.p') ? LY.styleRefOnPage(page, instr || '') : '';
     const f = { Arabic: 'decimal', ROMAN: 'upperRoman', roman: 'lowerRoman', ALPHABETIC: 'upperLetter', alphabetic: 'lowerLetter', Ordinal: 'ordinal', CardText: 'cardinalText', OrdText: 'ordinalText' }[fmt];
     if (ty === 'PAGE') return D.fmtNum(page.numVal, f || page.numFmt || 'decimal');
-    if (ty === 'NUMPAGES') return D.fmtNum(LY.pages.length || 1, f || 'decimal');
-    if (ty === 'SECTIONPAGES') return D.fmtNum(LY.pages.filter((p) => p.si === page.si).length || 1, f || 'decimal');
+    if (ty === 'NUMPAGES') return D.fmtNum(fieldCounts ? fieldCounts.total : 1, f || 'decimal');
+    if (ty === 'SECTIONPAGES') return D.fmtNum(fieldCounts && fieldCounts.sections[page.si] || 1, f || 'decimal');
     if (ty === 'SECTION') return String(page.si + 1);
     return '';
   };
@@ -1005,8 +1011,9 @@
   /**
    * Lay out the main story into pages. fromPage: index of the first page to rebuild (incremental).
    */
-  LY.paginate = function (fromPage) {
+  LY.paginate = function (fromPage, fieldPass = 0) {
     const d = doc();
+    if (fieldDoc !== d) { fieldDoc = d; fieldCounts = null; }
     const t0 = performance.now();
     D.reindex(d);
     LY.labels = D.computeLists(d);
@@ -1135,11 +1142,24 @@
       }
     }
     /* finish: page numbers that depend on the total */
-    LY.refreshDynamic();
+    fieldCounts = { total: LY.pages.length, sections: [] };
+    for (const p of LY.pages) fieldCounts.sections[p.si] = (fieldCounts.sections[p.si] || 0) + 1;
+    // Fill in the totals. Pages are laid out again only from the first one where a new value
+    // changes a paragraph's height (a line wraps differently, a header grows); a bounded number
+    // of passes, as that can change the total again.
+    const moved = LY.refreshDynamic();
+    if (moved >= 0 && fieldPass < 3) {
+      const resyncOK = LY.resyncOK;
+      LY.resyncOK = null; // later pages were laid out against the old heights
+      try { LY.paginate(moved, fieldPass + 1); } finally { LY.resyncOK = resyncOK; }
+      LY.layoutMs = performance.now() - t0;
+      return;
+    }
     for (const p of LY.pages) p.el.classList.toggle('vcenter', false);
     applyVAlign();
     LY.layoutMs = performance.now() - t0;
     LY.fitSizer();
+    R.layoutMarks(LY.root, LY.opts.showMarks);
     L.bus.emit('layout-done', { pages: LY.pages.length });
   };
   function regionStartState(region, page, blocks) {
@@ -1170,11 +1190,29 @@
       for (const r of p.regions) { r.el.style.top = r.y + off + 'px'; fixAbsFrames(r.el); }
     }
   }
-  /** update PAGE/NUMPAGES fields after layout */
+  /** update PAGE/NUMPAGES fields after layout; returns the index of the first page whose
+      layout the new values change (a paragraph's height changed), or -1 */
   LY.refreshDynamic = function () {
-    for (const p of LY.pages) {
-      for (const f of p.el.querySelectorAll('.fdyn')) f.textContent = LY.dynField(f.dataset.fty, f.dataset.fmt, p, f.dataset.instr);
+    const updates = [];
+    LY.pages.forEach((p, k) => {
+      for (const f of p.el.querySelectorAll('.fdyn')) {
+        const value = LY.dynField(f.dataset.fty, f.dataset.fmt, p, f.dataset.instr);
+        if (f.textContent !== value) updates.push([f, value, k]);
+      }
+    });
+    if (!updates.length) return -1;
+    /* read every height before the first write, so the browser lays out once before and once after */
+    const frags = new Map();
+    for (const [f, , k] of updates) { const frag = f.closest('.p') || f.parentElement; if (!frags.has(frag)) frags.set(frag, { k, h: frag.offsetHeight }); }
+    for (const [f, value] of updates) f.textContent = value;
+    for (const frag of frags.keys()) {
+      if (!frag._tabs) continue;
+      const { p, ctx, frame } = frag._tabs;
+      R.layoutTabs(frag, p, ctx, frame.el.getBoundingClientRect().left + (frame.leftPad || 0) * LY.scale(), LY.scale(), frame.width || frame.el.offsetWidth);
     }
+    let first = -1;
+    for (const [frag, { k, h }] of frags) if (frag.offsetHeight !== h && (first < 0 || k < first)) first = k;
+    return first;
   };
 
   /* ================= flow views (Normal / Web / Outline) ================= */
@@ -1199,6 +1237,7 @@
     else LY.flow(frame, blocks, { bi: 0, sub: null }, blocks.length, ctx);
     /* section / page break markers are rendered via CSS on .has-sect and .pbrk */
     LY.fitSizer();
+    R.layoutMarks(LY.root, LY.opts.showMarks);
     L.bus.emit('layout-done', { pages: 0 });
   };
 

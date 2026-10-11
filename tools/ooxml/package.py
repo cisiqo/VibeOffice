@@ -31,6 +31,7 @@ A = {'http://schemas.openxmlformats.org/drawingml/2006/main', 'http://purl.oclc.
 S = {'http://schemas.openxmlformats.org/spreadsheetml/2006/main', 'http://purl.oclc.org/ooxml/spreadsheetml/main'}
 W14 = 'http://schemas.microsoft.com/office/word/2010/wordml'
 V = 'urn:schemas-microsoft-com:vml'
+DGM = 'http://schemas.openxmlformats.org/drawingml/2006/diagram'
 LEGACY_COMMENTS = '{http://schemas.microsoft.com/office/word/2010/11/wordml}commentsEx'
 MODERN_COMMENTS = '{http://schemas.microsoft.com/office/word/2012/wordml}commentsEx'
 # each preset shape's adjustment names, from the generated schema facts the apps use
@@ -333,6 +334,25 @@ class Package:
                 # diagram, chart and OLE part animations need their graphic frame
                 if ns in P and (tag == 'spTgt' and any(split(c.tag)[1] in ('graphicEl', 'oleChrtEl', 'subSp') for c in el) or tag in ('bldGraphic', 'bldDgm', 'bldOleChart')):
                     part_targets.append((part, at(el, 'spid'), path))
+                # PowerPoint finds a SmartArt's layout definition by the data's loTypeId and draws its default
+                # list when the related layout part has another uniqueId (133 of 134 corpus files with SmartArt match; the
+                # other is a LibreOffice bug report sample whose loTypeId is "relationship")
+                if tag == 'relIds' and ns == DGM:
+                    frame_rels = self.rels.get(part, {})
+                    dm, lo = (frame_rels.get(at(el, n), {}).get('target') for n in ('dm', 'lo'))
+                    if dm in self.xml and lo in self.xml:
+                        doc = next((pt for pt in self.xml[dm].iter('{%s}pt' % DGM) if pt.get('type') == 'doc'), None)
+                        pr = doc.find('{%s}prSet' % DGM) if doc is not None else None
+                        lo_type, unique = pr.get('loTypeId') if pr is not None else None, self.xml[lo].get('uniqueId')
+                        if lo_type is not None and lo_type != unique:
+                            self.issue('diagram-layout-id', dm, f'{lo_type} / {unique}', path)
+                # PowerPoint rejects a whole SmartArt layout definition (and draws its default list) when the
+                # branches of a choice give one layout node different algorithm types; none of the corpus's
+                # 303 choices in 60 Office definitions do
+                if tag == 'choose' and ns == DGM:
+                    types = {a.get('type') for b in el for a in b if split(a.tag) == (DGM, 'alg')}
+                    if len(types) > 1:
+                        self.issue('diagram-mixed-algorithm', part, ' / '.join(sorted(t or '' for t in types)), path)
                 if tag in ('stCxn', 'endCxn') and ns in A:
                     references.append((part, 'shape', at(el, 'id'), path, branches))
                 if tag == 'tn' and ns in P:

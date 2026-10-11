@@ -11,6 +11,7 @@
 <link rel="stylesheet" href="../fonts/fonts.css">
 <link rel="stylesheet" href="../common/looks.css">
 <link rel="stylesheet" href="../common/ui.css">
+<link rel="stylesheet" href="../common/scout/scout.css">
 <style>
 /* The presentation window: docked command bars, three-pane Normal view (slides/outline · slide · task pane),
    drawing bar and status bar. Chrome colours come from the look settings (../common/looks.css). */
@@ -226,7 +227,12 @@
 .sa-side { display: flex; flex-direction: column; gap: 6px; }
 .sa-big { border: 1px solid var(--field-border); background: var(--surface); padding: 4px; }
 .sa-desc { color: var(--muted); }
-.sa-menu-grid { display: grid; grid-template-columns: repeat(4, 68px); gap: 4px; padding: 4px; background: var(--surface); }
+.sa-menu-grid { width: 300px; max-height: 70vh; overflow: auto; padding: 4px; background: var(--surface); }
+.sa-pick { display: grid; gap: 4px; margin: 2px 0 6px; }
+.sa-pick .sa-cell { padding: 2px; min-width: 0; }
+.sa-pick .sa-cell svg { display: block; max-width: 100%; height: auto; }
+.sa-tools { display: flex; gap: 1px; margin-bottom: 2px; }
+.sa-sub { color: var(--muted); margin: 4px 0 2px; }
 .sa-pane { display: flex; flex-direction: column; gap: 2px; margin: 4px 0 8px; }
 .sa-line { display: flex; align-items: center; gap: 4px; }
 .sa-bul { flex: none; width: 8px; color: var(--muted); }
@@ -325,6 +331,8 @@
 <script src="js/pptx-write.js"></script>
 <script src="js/commands.js"></script>
 <script src="js/templates.js"></script>
+<script src="../common/scout/scout.js"></script>
+<script src="../common/scout/assistant.js"></script>
 <script src="../common/search.js"></script>
 <script src="../common/ribbon.js"></script>
 <script src="js/ribbon.js"></script>

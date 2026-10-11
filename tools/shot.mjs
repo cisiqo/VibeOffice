@@ -13,8 +13,11 @@
 // --keep   leave the tab open (brought to the front) instead of closing it
 // --transparent  no default white page background, so .png shots keep transparency (e.g. icons)
 // --inject a.js,b.js  evaluate helper scripts in the page once it is ready
+// --pre a.js,b.js     run scripts before each page's own, on every page the tab loads (as the desktop
+//                     app's initialization script; e.g. tests/desktop/host-stub.js)
 // --timeout ms      longest a single step (or CDP call) may take, default 120000. A hung or crashed
 //                   page still gets its tab closed (also on Ctrl-C / SIGTERM).
+// The page says it is automated (navigator.webdriver), so the assistant waits to be asked (L.assistant.show()).
 // Env: CDP (default http://127.0.0.1:9222), BASE (default http://127.0.0.1:8760)
 import fs from 'fs';
 import path from 'path';
@@ -29,6 +32,7 @@ const W = +opt('--w', 1280), H = +opt('--h', 800), qs = opt('--qs', '');
 const ready = opt('--ready', "document.readyState === 'complete'");
 const out = opt('--out', '/tmp/shots');
 const inject = opt('--inject', '');
+const pre = opt('--pre', '');
 const stepMs = +opt('--timeout', 120000);
 const keep = flag('--keep'), transparent = flag('--transparent');
 const [page = '', stepsArg = '[]'] = argv;
@@ -85,8 +89,12 @@ try {
   await send('Network.setCacheDisabled', { cacheDisabled: true });
   // the page keeps focus while the browser window is in the background
   await send('Emulation.setFocusEmulationEnabled', { enabled: true });
+  // an automated browser (navigator.webdriver), so the assistant waits to be asked (common/scout/assistant.js)
+  await send('Emulation.setAutomationOverride', { enabled: true });
   await send('Emulation.setDeviceMetricsOverride', { width: W, height: H, deviceScaleFactor: 1, mobile: false });
   if (transparent) await send('Emulation.setDefaultBackgroundColorOverride', { color: { r: 0, g: 0, b: 0, a: 0 } });
+
+  for (const f of pre ? pre.split(',') : []) await send('Page.addScriptToEvaluateOnNewDocument', { source: fs.readFileSync(f, 'utf8') });
 
   const t0 = Date.now();
   await send('Page.navigate', { url: `${BASE}/${page}${qs ? '?' + qs : ''}` });
