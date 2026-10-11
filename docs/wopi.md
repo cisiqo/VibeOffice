@@ -95,10 +95,15 @@ For local protocol testing, HTTP and loopback hosts work:
 ```sh
 python3 tools/wopi/server.py \
   --public-url http://127.0.0.1:8761 \
-  --wopi-host http://127.0.0.1:9981
+  --wopi-host http://127.0.0.1:8080 \
+  --proof-key /Users/cisiqo/docker/php7-wopi/keys/proof-private.pem \
+  --oauth-token dev-oauth
 ```
 
 This starts the WOPI gateway at `127.0.0.1:8761`; it is separate from `tools/serve.py`.
+The Compose reference host enables proof validation, so omitting `--proof-key` makes it reject the
+launch with `Missing or invalid WOPI proof timestamp`. Use the same private key whose public half is
+mounted into the PHP container.
 
 ### Local PHP reference host
 
