@@ -29,6 +29,8 @@
   cmd('close', { label: '&Close', run: () => A().closeWorkbook() });
   cmd('save', { label: '&Save', icon: 'save', key: 'Ctrl+S', run: run(() => A().save()) });
   cmd('saveAs', { label: 'Save &As...', key: 'F12', run: run(() => D().saveAs()) });
+  cmd('wopiRename', { label: 'Rena&me...', enabled: () => !!(window.VO && VO.wopi && VO.wopi.canRename), run: () => VO.wopi.renameDialog() });
+  cmd('wopiDelete', { label: '&Delete File...', enabled: () => !!(window.VO && VO.wopi && VO.wopi.canDelete), run: () => VO.wopi.deleteDialog() });
   cmd('saveWeb', { label: 'Save as Web Pa&ge...', run: run(() => A().saveAs('html')) });
   cmd('exportPDF', { label: 'Export to &PDF...', icon: 'print', run: run(() => L.print.exportPDF()) });
   cmd('exportCSV', { label: 'Save as &CSV', run: run(() => A().saveAs('csv')) });

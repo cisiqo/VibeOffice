@@ -53,7 +53,7 @@
   function buildMenus() {
     const recentItems = () => (window.VO ? VO.recentMenuItems(4) : []);
     const menus = [
-      { label: '&File', items: () => ['new', 'open', 'close', '-', 'save', 'saveAs', 'saveWeb', 'fileSearch', '-', 'webPreview', '-', 'pageSetup', 'printPreview', 'print', '-', { label: 'Sen&d To', sub: ['sendMail', 'exportPDF'] }, 'properties', ...((recentItemsList) => (recentItemsList.length ? ['-', ...recentItemsList] : []))(recentItems()), '-', 'exitApp'] },
+      { label: '&File', items: () => ['new', 'open', 'close', '-', 'save', 'saveAs', ...(window.VO && VO.wopi && VO.wopi.active ? ['wopiRename', 'wopiDelete'] : []), 'saveWeb', 'fileSearch', '-', 'webPreview', '-', 'pageSetup', 'printPreview', 'print', '-', { label: 'Sen&d To', sub: ['sendMail', 'exportPDF'] }, 'properties', ...((recentItemsList) => (recentItemsList.length ? ['-', ...recentItemsList] : []))(recentItems()), '-', 'exitApp'] },
       {
         label: '&Edit', items: () => ['undo', 'redo', '-', 'cut', 'copy', 'officeClipboard', 'paste', 'pasteSpecial', 'pasteHyperlink', '-',
           { label: 'Cle&ar', sub: ['clearFormats', 'clearContents'] }, 'selectAll', '-', 'find', 'replace', 'goTo', '-', 'links', 'editObject'],
@@ -1280,6 +1280,7 @@
         /* an unsaved version: the changes are not saved yet, and a never-saved document still needs Save As */
         if (o && o.draft && doc()) { doc().dirty = true; A.saved = !!o.saved; A.fileName = o.name.replace(/\.(docx|docm|dotx|dotm|md|markdown|zip)$/i, ''); A.updateTitle(); A.status('Recovered the unsaved changes. Save the document to keep them.'); ui.refresh(); }
       },
+      renamed(name) { A.fileName = name.replace(/\.[^.]+$/, ''); A.docs[A.cur] = winState(); A.updateTitle(); ui.refresh(); },
       /* a Markdown document's unsaved version is Markdown too, so recovering it loses nothing */
       async snapshot(d) {
         const t = winOf(d).fileType;

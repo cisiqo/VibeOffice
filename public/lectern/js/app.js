@@ -61,7 +61,7 @@
   function buildMenus() {
     const autoShapeSub = (group) => ({ custom: (close) => shapeGrid(L.geom.MENU[group], close) });
     const menus = [
-      { label: '&File', items: () => ['new', 'open', 'close', '-', 'save', 'saveAs', 'saveWeb', '-', 'pageSetup', 'printPreview', 'print', '-', 'properties', ...((r) => (r.length ? ['-', ...r] : []))(window.VO ? VO.recentMenuItems(4) : []), '-', 'exitApp'] },
+      { label: '&File', items: () => ['new', 'open', 'close', '-', 'save', 'saveAs', ...(window.VO && VO.wopi && VO.wopi.active ? ['wopiRename', 'wopiDelete'] : []), 'saveWeb', '-', 'pageSetup', 'printPreview', 'print', '-', 'properties', ...((r) => (r.length ? ['-', ...r] : []))(window.VO ? VO.recentMenuItems(4) : []), '-', 'exitApp'] },
       { label: '&Edit', items: ['undo', 'redo', '-', 'cut', 'copy', 'officeClipboard', 'paste', 'pasteSpecial', '-', 'clear', 'selectAll', 'duplicate', 'deleteSlide', '-', 'find', 'replace'] },
       {
         label: '&View', items: () => ['viewNormal', 'viewSorter', 'showFromStart', 'viewNotes', '-',
@@ -2092,6 +2092,7 @@ addEventListener('resize',fit);fit();show(0);<\/script></body></html>`], { type:
         /* an unsaved version: the changes are not saved yet, and a never-saved presentation still needs Save As */
         if (o && o.draft) { L.hist.dirty = true; A.saved = !!o.saved; A.fileName = o.name.replace(/\.(pptx|ppsx|potx|pptm|ppsm|potm)$/i, ''); A.updateTitle(); A.status('Recovered the unsaved changes. Save the presentation to keep them.'); ui.refresh(); }
       },
+      renamed(name) { A.fileName = name.replace(/\.[^.]+$/, ''); A.updateTitle(); ui.refresh(); },
       snapshot: (p) => L.pptx.write(p, { format: L.opc.formats[A.fileType] ? A.fileType : p.ooxmlFormat || 'pptx' }),
       docInfo: () => ({ name: A.fileName + '.' + (A.fileType || L.pres.ooxmlFormat || 'pptx'), lossState: L.opc.lossState(L.pres) }),
       isDirty: (p) => p === L.pres && !!L.hist.dirty,

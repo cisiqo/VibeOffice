@@ -10,6 +10,21 @@ The optional WOPI gateway has its own fake-host integration test:
 
     python3 -m unittest tools/wopi/test_server.py
 
+For the local PHP reference host, start its Compose stack and run its destructive integration test. It
+creates uniquely named files in `app/office/`, covers token rejection, locks, atomic PutFile,
+PutRelativeFile, RenameFile, DeleteFile, proof-key verification, token refresh and the root
+Container/Ecosystem routes, and removes the files afterwards:
+
+    cd /Users/cisiqo/docker/php7-wopi
+    docker compose up -d --force-recreate
+    python3 test_wopi.py
+
+Then serve `tools/wopi/preview.html` over loopback and check DOCX, XLSX and PPTX in Preview and Edit
+mode. In Edit mode verify Save, Save As, File ▸ Rename and File ▸ Delete; Preview must have no editing
+bars. Launch two edit sessions for the same disposable file: they must share the host lock, a clean peer
+must reload after the other saves, and a dirty peer must preserve its work and offer a conflict copy.
+A `.doc` sample remains unsupported until the host converts it to `.docx`.
+
 Run and deployment instructions are in [wopi.md](wopi.md).
 
 ## Screenshots and console errors: tools/shot.mjs

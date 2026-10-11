@@ -463,7 +463,7 @@
   function buildMenus() {
     const recent = () => (window.VO ? VO.recentMenuItems(4) : []);
     const menus = [
-      { label: '&File', items: () => ['newBook', 'open', 'close', '-', 'save', 'saveAs', 'saveWeb', '-', 'pageSetup', { label: 'Prin&t Area', sub: ['setPrintArea', 'clearPrintArea'] }, 'printPreview', 'print', '-', { label: 'Sen&d To', sub: ['exportPDF', 'exportCSV'] }, 'properties', ...((recentList) => (recentList.length ? ['-', ...recentList] : []))(recent()), '-', 'exitApp'] },
+      { label: '&File', items: () => ['newBook', 'open', 'close', '-', 'save', 'saveAs', ...(window.VO && VO.wopi && VO.wopi.active ? ['wopiRename', 'wopiDelete'] : []), 'saveWeb', '-', 'pageSetup', { label: 'Prin&t Area', sub: ['setPrintArea', 'clearPrintArea'] }, 'printPreview', 'print', '-', { label: 'Sen&d To', sub: ['exportPDF', 'exportCSV'] }, 'properties', ...((recentList) => (recentList.length ? ['-', ...recentList] : []))(recent()), '-', 'exitApp'] },
       {
         label: '&Edit', items: () => ['undo', 'redo', '-', 'cut', 'copy', 'officeClipboard', 'paste', 'pasteSpecial', 'pasteHyperlink', '-',
           { label: 'F&ill', sub: ['fillDown', 'fillRight', 'fillUp', 'fillLeft', 'fillAcross', 'fillSeries', 'fillJustify'] },
@@ -1444,6 +1444,7 @@
         if (o?.draft && b) L.opc.recoverLosses(b.wb, o.lossState);
         if (o && o.draft && b) { b.dirty = true; b.name = o.saved ? o.name : o.name.replace(/\.(xlsx|xlsm|xltx|xltm)$/i, ''); b.untitled = !o.saved; b.saved = !!o.saved; updateTitle(); A.status('Recovered the unsaved changes. Save the workbook to keep them.'); ui.refresh(); }
       },
+      renamed(name) { const b = book(); if (b) { b.name = name; b.wb.fileName = name; updateTitle(); ui.refresh(); } },
       snapshot: (b) => L.xlsxWrite.write(b.wb, { type: L.opc.formats[b.type] ? b.type : b.wb.ooxmlFormat || 'xlsx', password: b.password }),
       docInfo(b) {
         const type = L.opc.formats[b.type] ? b.type : b.wb.ooxmlFormat || 'xlsx';

@@ -109,7 +109,13 @@ Version: `VO.VERSION` in `suite.js` is the one version string (`L.VERSION` reads
 The optional WOPI deployment keeps the editors and file-format code unchanged. A launch POST goes to
 `tools/wopi/server.py`; the gateway validates the WOPI host allowlist, keeps the access token in memory
 and injects an opaque session into the selected app page. `common/wopi.js` then uses the existing
-`VO.attach` open hook and intercepts `L.saveFile` only for the current app's native OOXML formats.
+`VO.attach` open hook and intercepts `L.saveFile` only for the current app's native OOXML formats. The
+transport owns shared-lock recovery, Version/SHA-256 conflict checks, safe conflict copies, RenameFile,
+DeleteFile, trusted postMessage and save-level coauthor event handling; the three apps expose host
+operations only while such a writable WOPI session is active. The gateway can sign host requests with a
+WOPI proof key, refresh finite access tokens through a bootstrapper, and expose the host's
+Containers/Ecosystem routes. Coauthor peers receive saved versions, but unsaved keystrokes are not
+merged.
 Ordinary launches do not set `window.__VO_WOPI__`, so this code is inert and local files still never
 leave the browser. Deployment, security boundaries and supported operations are in [docs/wopi.md](wopi.md).
 

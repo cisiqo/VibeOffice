@@ -25,6 +25,8 @@
   C('close', { label: '&Close', run: () => A().closePresentation() });
   C('save', { label: '&Save', icon: 'save', key: 'Ctrl+S', tip: 'Save', run: () => A().save() });
   C('saveAs', { label: 'Save &As...', run: () => A().saveAs() });
+  C('wopiRename', { label: 'Rena&me...', enabled: () => !!(window.VO && VO.wopi && VO.wopi.canRename), run: () => VO.wopi.renameDialog() });
+  C('wopiDelete', { label: '&Delete File...', enabled: () => !!(window.VO && VO.wopi && VO.wopi.canDelete), run: () => VO.wopi.deleteDialog() });
   C('saveWeb', { label: 'Save as Web Pa&ge...', icon: 'webPage', run: () => A().exportAs('html') });
   C('pageSetup', { label: 'Page Set&up...', run: () => L.dlg.pageSetup() });
   C('printPreview', { label: 'Print Pre&view', icon: 'preview', tip: 'Print Preview', run: () => A().setView('preview') });
