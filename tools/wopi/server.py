@@ -126,12 +126,23 @@ class CoauthorManager:
                     'X-WOPI-Override': override, 'X-WOPI-Lock': state['lock']}, body=b'')
             except WopiError as error:
                 current = header_value(error.headers, 'X-WOPI-Lock')
-                if override != 'REFRESH_LOCK' or error.status != 409 or current:
+                if error.status != 409:
                     raise
-                # Every previous browser disappeared and the host expired their shared lock.
-                state['holders'].clear()
-                remote(session, method='POST', headers={
-                    'X-WOPI-Override': 'LOCK', 'X-WOPI-Lock': state['lock']}, body=b'')
+                if override == 'REFRESH_LOCK' and not current:
+                    # Every previous browser disappeared and the host expired their shared lock.
+                    state['holders'].clear()
+                    remote(session, method='POST', headers={
+                        'X-WOPI-Override': 'LOCK', 'X-WOPI-Lock': state['lock']}, body=b'')
+                elif override == 'LOCK' and current and current.startswith('VibeOffice-'):
+                    # The in-memory gateway restarted while its host lock was still alive. Old browser
+                    # sessions cannot use the new gateway, so reclaim only locks carrying our namespace.
+                    remote(session, method='POST', headers={
+                        'X-WOPI-Override': 'UNLOCK_AND_RELOCK',
+                        'X-WOPI-OldLock': current,
+                        'X-WOPI-Lock': state['lock'],
+                    }, body=b'')
+                else:
+                    raise
             state['holders'].add(session['sid'])
 
     def refresh(self, session):
@@ -205,6 +216,11 @@ class CoauthorManager:
                 self.lock.wait(timeout=25)
             event = state.get('event')
             return event if event and event['revision'] > since else {'revision': state['revision']}
+
+    def revision(self, session):
+        with self.lock:
+            state = self.states.get(session.get('coauthor_key'))
+            return state['revision'] if state else 0
 
 
 def origin(url):
@@ -485,7 +501,14 @@ class WopiHandler(http.server.SimpleHTTPRequestHandler):
                         raise WopiError(400, 'Invalid coauthoring revision.')
                     return self.reply_json(200, self.server.coauthors.wait(session, max(0, since)))
                 if part == 'reload':
-                    return self.render_session(session)
+                    try:
+                        since = int(urllib.parse.parse_qs(
+                            urllib.parse.urlsplit(self.path).query).get(
+                                'since', [str(self.server.coauthors.revision(session))])[0])
+                    except ValueError:
+                        raise WopiError(400, 'Invalid coauthoring revision.')
+                    session['info'] = session_file_info(session)
+                    return self.render_session(session, max(0, since))
             except WopiError as e:
                 return self.reply_error(e)
         return super().do_GET()
@@ -560,7 +583,7 @@ class WopiHandler(http.server.SimpleHTTPRequestHandler):
         except WopiError as e:
             return self.reply_error(e)
 
-    def render_session(self, session):
+    def render_session(self, session, event_revision=None):
         page = os.path.join(ROOT, session['app'], 'index.html')
         try:
             with open(page, 'rb') as stream:
@@ -571,7 +594,11 @@ class WopiHandler(http.server.SimpleHTTPRequestHandler):
             'session': session['sid'], 'info': session['info'], 'action': session['action'],
             'saveAs': session.get('saveAs', False), 'frameTrust': session.get('frameTrust', False),
             'coauthorLock': session.get('coauthor_lock'),
+            'eventRevision': (self.server.coauthors.revision(session)
+                              if event_revision is None else event_revision),
         }, ensure_ascii=False).replace('<', '\\u003c')
+        data = data.replace(
+            b'<head>', f'<head>\n<base href="/{session["app"]}/">'.encode('utf-8'), 1)
         marker = b'<script src="../common/suite.js"></script>'
         data = data.replace(
             marker, f'<script>window.__VO_WOPI__={boot};</script>\n'.encode('utf-8') + marker, 1)

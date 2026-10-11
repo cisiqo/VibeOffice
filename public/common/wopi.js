@@ -19,7 +19,7 @@
   let app = null, hooks = null, info = boot.info || null;
   let lock = null, refreshTimer = 0, ready = false, saving = null;
   let recoveringLock = null;
-  let eventRevision = 0, stopEvents = false, remoteChanged = false;
+  let eventRevision = Number(boot.eventRevision) || 0, stopEvents = false, remoteChanged = false;
   let lastEditNotice = 0;
 
   function ext(name) {
@@ -133,7 +133,7 @@
               remoteChanged = true;
               (hooks.message || window.alert)('Another editor saved a newer version. Your next save will offer a conflict copy.');
             } else {
-              location.replace(base + '/reload');
+              location.replace(base + '/reload?since=' + eventRevision);
               return;
             }
           } else if (event.kind === 'rename' && event.name) {

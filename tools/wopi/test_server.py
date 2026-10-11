@@ -317,6 +317,13 @@ class WopiGatewayTest(unittest.TestCase):
             event = json.load(response)
         self.assertEqual('save', event['kind'])
         self.assertEqual(first, event['origin'])
+        with self.request(
+                f'/wopi/session/{second}/reload?since={event["revision"]}') as response:
+            page = response.read().decode()
+        self.assertIn('<base href="/quire/">', page)
+        boot = json.loads(re.search(r'window\.__VO_WOPI__=(.*?);</script>', page).group(1))
+        self.assertEqual('2', boot['info']['Version'])
+        self.assertEqual(event['revision'], boot['eventRevision'])
         self.gateway.sessions.get(second)['token'] = 'peer-secret'
         with self.command(first, 'rename', lock='client-1', name='Together.docx'):
             pass
@@ -342,6 +349,17 @@ class WopiGatewayTest(unittest.TestCase):
             self.gateway.sessions.get(second)['coauthor_key']]['holders']
         self.assertEqual({second}, holders)
         with self.command(second, 'unlock', lock='client-2'):
+            pass
+        self.assertIsNone(FakeHost.lock)
+
+    def test_new_gateway_reclaims_its_stale_host_lock(self):
+        sid = self.launch()
+        FakeHost.lock = 'VibeOffice-stale-from-previous-process'
+        with self.command(sid, 'lock', lock='client-1'):
+            pass
+        self.assertTrue(FakeHost.lock.startswith('VibeOffice-'))
+        self.assertNotEqual('VibeOffice-stale-from-previous-process', FakeHost.lock)
+        with self.command(sid, 'unlock', lock='client-1'):
             pass
         self.assertIsNone(FakeHost.lock)
 
