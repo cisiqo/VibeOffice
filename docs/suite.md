@@ -6,6 +6,7 @@
 | `public/common/suite.js` | `window.VO`, loaded by the Start Center and before every app's own scripts |
 | `public/manifest.webmanifest` | Install metadata: icons, shortcuts, file handlers, screenshots |
 | `public/sw.js` | Service worker (dev mode: no caching) |
+| `public/common/wopi.js` | Optional WOPI browser transport; inactive on the normal static site (see [WOPI](wopi.md)) |
 | `public/fonts/` | Metric-compatible stand-ins for Calibri, Cambria and Georgia (Carlito, Caladea, Gelasio; 1.1 MB) as WOFF2, since macOS, iOS and Linux lack them, `fonts.css` and `LICENSES.txt` (SIL OFL 1.1); rebuilt by `tools/fonts.py`. Pages name the real font first (`L.fontStack`), so a browser downloads a file only when the machine lacks the real font; `L.embedFonts` puts the ones a page names into a standalone export. The Font boxes (`L.fontSections`) follow Office's sections: Theme Fonts (headings, body), Recently Used Fonts, All Fonts (`L.FONT_LIST`, the frequently used Office fonts, plus the document's own), and in Chrome/Edge a first item that loads the computer's fonts (Local Font Access, after the user allows it; kept in this browser as `vibeoffice.localFonts`). Beside a name this computer lacks is the font that draws it (`L.fontNote`: an installed substitute, a stand-in, or "not installed") |
 | `public/icons/` | `icon.svg` (rounded, transparent corners) and `icon-maskable.svg` (full bleed, artwork inside the 40 % safe circle), and the PNGs made from them |
 
@@ -40,7 +41,7 @@ File ▸ Exit closes the app's documents (asking to save each; Cancel stays) and
 
 Each app, in its `A.init`, picks template, blank or sample from `VO.launch` and finishes with
 
-    VO.attach('<app>', { open(file, { draft, name, saved }), thumb(), message(text), templates(),
+    VO.attach('<app>', { open(file, { draft, name, saved }), setReadOnly(on), thumb(), message(text), templates(),
                          snapshot(doc), docInfo(doc), isDirty(doc), current(), autosave(), showRecovery() })
 
 and reports `VO.opened(file, doc)` after any successful open (File ▸ Open, drop, Start Center), `VO.saved(name, blob, doc)` after a save in its own format, `VO.changed(doc)` after an edit and `VO.discard(doc)` when the user drops the changes (Quire `.docx/.dotx`; Ledger everything but web pages and PDF; Lectern `.pptx/.ppsx/.potx`). Every call is guarded with `if (window.VO)`, so an app page still runs on its own.
@@ -94,6 +95,15 @@ What each app provides:
 - a spelling UI sets `L.spell.refreshSoon` if it draws underlines (Quire).
 
 Version: `VO.VERSION` in `suite.js` is the one version string (`L.VERSION` reads it); it says `dev` in the repository, and the published copy stamps it as `YYYY.MM.<6-char commit>` (for example `2026.10.8f8494`). The Start Center (under its privacy note, beside About, and in About) and each app's Help ▸ About show it.
+
+## WOPI
+
+The optional WOPI deployment keeps the editors and file-format code unchanged. A launch POST goes to
+`tools/wopi/server.py`; the gateway validates the WOPI host allowlist, keeps the access token in memory
+and injects an opaque session into the selected app page. `common/wopi.js` then uses the existing
+`VO.attach` open hook and intercepts `L.saveFile` only for the current app's native OOXML formats.
+Ordinary launches do not set `window.__VO_WOPI__`, so this code is inert and local files still never
+leave the browser. Deployment, security boundaries and supported operations are in [docs/wopi.md](wopi.md).
 
 ## Looks
 

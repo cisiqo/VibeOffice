@@ -64,7 +64,7 @@
     frame.appendChild(L.render.thumb(L.pres, s, w, { index: i }));
     it.append(meta, frame);
     it.addEventListener('pointerdown', (e) => onThumbDown(e, i));
-    it.addEventListener('contextmenu', (e) => { e.preventDefault(); if (!L.app.slideSel.has(i)) { L.app.slideSel = new Set([i]); E().goto(i); } L.app.contextThumb(e); });
+    it.addEventListener('contextmenu', (e) => { e.preventDefault(); if (!L.app.slideSel.has(i)) { L.app.slideSel = new Set([i]); E().goto(i); } if (!E().readOnly) L.app.contextThumb(e); });
     it.addEventListener('dblclick', () => { if (L.app.view !== 'normal') L.app.setView('normal'); });
     return it;
   }
@@ -94,6 +94,7 @@
     if (!sel.has(i)) L.app.slideSel = new Set([i]);
     if (E().idx !== i || L.app.view !== 'normal') E().goto(i);
     LP.markCurrent();
+    if (E().readOnly) return;
     /* drag to reorder */
     const y0 = e.clientY;
     let line = null, target = null;
@@ -138,7 +139,7 @@
   /* --- outline --- */
   let olDirty = false, olHistPushed = false;
   function renderOutline() {
-    const ol = h('div', { class: 'outline' + (L.app.opts.outlinePlain ? ' plain' : ''), contenteditable: 'true', spellcheck: String(!!L.app.opts.spell), role: 'textbox', 'aria-multiline': 'true', 'aria-label': 'Outline' });
+    const ol = h('div', { class: 'outline' + (L.app.opts.outlinePlain ? ' plain' : ''), contenteditable: E().readOnly ? 'false' : 'true', spellcheck: String(!!L.app.opts.spell), role: 'textbox', 'aria-multiline': 'true', 'aria-label': 'Outline' });
     L.pres.slides.forEach((s, i) => {
       const title = s.shapes.find((x) => x.ph && (x.ph.type === 'title' || x.ph.type === 'ctrTitle'));
       const row = h('div', { class: 'ol-row title', 'data-slide': s.id });

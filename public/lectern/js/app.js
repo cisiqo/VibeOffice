@@ -2094,6 +2094,11 @@ addEventListener('resize',fit);fit();show(0);<\/script></body></html>`], { type:
       docInfo: () => ({ name: A.fileName + '.' + (A.fileType || L.pres.ooxmlFormat || 'pptx'), lossState: L.opc.lossState(L.pres) }),
       isDirty: (p) => p === L.pres && !!L.hist.dirty,
       current: () => L.pres,
+      setReadOnly(on) {
+        E.readOnly = !!on;
+        if (on && TE.active()) TE.end();
+        if (L.panes.left.tab === 'outline') L.panes.left.render();
+      },
       showRecovery() { A.opts.taskOpen = true; L.$('#taskpane').hidden = false; L.panes.task.show('recovery'); },
       thumb: () => L.pres.slides[0] && A.slideCanvas(L.pres.slides[0], 480),
       message: (t) => ui.msg(t, { icon: 'warn' }),

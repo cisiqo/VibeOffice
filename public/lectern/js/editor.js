@@ -6,6 +6,7 @@
   const M = L.model;
   const E = (L.ed = {
     idx: 0, sel: [], zoom: 'fit', scale: 1, tool: null,
+    readOnly: false,
     grid: { show: false, snap: true, size: 6, guides: false, gx: null, gy: null },
     view: 'normal', masterKind: 'slide', masterSlide: null,
   });
@@ -361,6 +362,15 @@
     if (e.button === 1) return;
     L.ui.closeMenus();
     const tgt = e.target;
+    if (E.readOnly) {
+      const hit = shapeHit(tgt);
+      if (e.button === 0) {
+        if (hit) E.select([pickId(hit)]);
+        else E.clearSel();
+        E.refocus();
+      }
+      return;
+    }
     /* content placeholder icons */
     const act = tgt.closest && tgt.closest('[data-content-act]');
     if (act && e.button === 0) {
@@ -709,6 +719,7 @@
   window.addEventListener('pointercancel', () => { drag = null; });
 
   function onDbl(e) {
+    if (E.readOnly) return;
     if (E.tool && ['freeform', 'curve'].includes(E.tool.kind)) return;
     const hit = shapeHit(e.target);
     if (!hit) return;
@@ -724,6 +735,7 @@
     }
   }
   function onContext(e) {
+    if (E.readOnly) { e.preventDefault(); return; }
     if (L.show && L.show.active) return;
     if (E.editing() && L.te.contains(e.target)) { if (e.shiftKey) return; e.preventDefault(); L.app.contextText(e); return; }
     const hit = shapeHit(e.target);
@@ -734,6 +746,7 @@
 
   /* ---------- drawing tools ---------- */
   E.setTool = function (tool) {
+    if (E.readOnly) return;
     if (E.editing()) L.te.end();
     E.tool = tool;
     E.scroller.classList.toggle('drawing', !!tool && tool.kind !== 'painter');

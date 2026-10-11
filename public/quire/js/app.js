@@ -1290,6 +1290,13 @@
       isDirty: (d) => !!(d && d.dirty),
       current: () => doc(),
       autosave: () => A.opts.autoRecover !== false,
+      setReadOnly(on) {
+        E.readOnly = !!on;
+        if (LY.root) {
+          LY.root.contentEditable = on ? 'false' : 'true';
+          LY.root.classList.toggle('readonly', !!on);
+        }
+      },
       showRecovery() { if (!L.panes) return; A.opts.taskOpen = true; L.$('#taskpane').hidden = false; L.panes.task.show('recovery'); },
       thumb: pageThumb,
       message: (t) => ui.msg(t, { icon: 'warn' }),

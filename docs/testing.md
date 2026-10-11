@@ -6,6 +6,12 @@
 
 Every response carries `Cache-Control: no-store`, so edited HTML and scripts are always re-fetched. Serve rather than open from disk: a `file://` page cannot fetch the proofing dictionaries, and password-protected files need WebCrypto, which wants https or localhost.
 
+The optional WOPI gateway has its own fake-host integration test:
+
+    python3 -m unittest tools/wopi/test_server.py
+
+Run and deployment instructions are in [wopi.md](wopi.md).
+
 ## Screenshots and console errors: tools/shot.mjs
 
 Drives a page in the Chromium listening on CDP 127.0.0.1:9222 (start one with `chromium --remote-debugging-port=9222 --remote-allow-origins=*`, or `--headless=new` on a machine without a display). It starts `tools/serve.py` if nothing listens on :8760.

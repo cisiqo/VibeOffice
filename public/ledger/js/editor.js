@@ -8,6 +8,7 @@
   const G = () => L.grid;
 
   E.active = false;
+  E.readOnly = false;
   E.mode = 'ready'; /* ready | enter | edit | point */
   let fbar, fbwrap, cell, surface = null, orig = '', point = null, acList = null, tipEl = null;
 
@@ -99,6 +100,7 @@
    * Start editing the active cell. mode: 'enter' (typing replaces) | 'edit' (F2 / double-click)
    */
   E.begin = function (mode, text, opts) {
+    if (E.readOnly) { L.ui.toast('This workbook is read-only.'); return false; }
     opts = opts || {};
     const g = G(), sh = g.sheet(), s = g.sel();
     if (E.active) return;

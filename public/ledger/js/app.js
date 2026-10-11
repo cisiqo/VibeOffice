@@ -315,6 +315,7 @@
         if (e.ctrlKey || e.metaKey) { A.toggleSheetSel(i); return; }
         if (e.shiftKey) { A.rangeSheetSel(i); return; }
         A.activateSheet(i);
+        if (G().readOnly) return;
         /* drag to reorder (Ctrl copies) */
         const x0 = e.clientX;
         let moved = false, target = null;
@@ -341,8 +342,8 @@
         };
         document.addEventListener('pointermove', mv); document.addEventListener('pointerup', up);
       });
-      t.addEventListener('dblclick', () => A.renameSheetInline(i));
-      t.addEventListener('contextmenu', (e) => { e.preventDefault(); tabMenu(e, i); });
+      t.addEventListener('dblclick', () => { if (!G().readOnly) A.renameSheetInline(i); });
+      t.addEventListener('contextmenu', (e) => { e.preventDefault(); if (!G().readOnly) tabMenu(e, i); });
       tabs.appendChild(t);
     });
     const at = tabs.querySelector('.stab.on');
@@ -391,6 +392,7 @@
     ], { x: e.clientX, y: e.clientY });
   }
   A.renameSheetInline = function (i) {
+    if (G().readOnly) return;
     const w = wb();
     i = i == null ? w.active : i;
     const s = w.sheets[i];
@@ -1442,6 +1444,11 @@
       },
       isDirty: (b) => !!(b && b.dirty),
       current: () => book(),
+      setReadOnly(on) {
+        L.grid.readOnly = !!on;
+        L.editor.readOnly = !!on;
+        if (on && L.editor.active) L.editor.cancel();
+      },
       showRecovery() { A.opts.taskOpen = true; L.$('#taskpane').hidden = false; L.panes.task.show('recovery'); },
       thumb: gridThumb,
       message: (t) => ui.msg(t, { icon: 'warn' }),

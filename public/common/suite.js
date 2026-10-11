@@ -199,6 +199,12 @@
   /** File ▸ Exit, after the app has closed its documents: an app window the Start Center opened
    * (installed) closes and shows the Start Center behind it; a tab goes to the Start Center */
   VO.exit = () => {
+    if (VO.wopi && VO.wopi.active && window.parent !== window) {
+      if (VO.wopi.info.ClosePostMessage === true) {
+        window.parent.postMessage(JSON.stringify({ MessageId: 'UI_Close', SendTime: Date.now(), Values: {} }), VO.wopi.info.PostMessageOrigin);
+      }
+      return;
+    }
     if (window.opener && !window.opener.closed) { window.close(); if (window.closed) return; }
     location.href = BASE;
   };
@@ -218,19 +224,24 @@
 
   /* ------------------------------------------------------------ the app side */
   const q = new URLSearchParams(location.search);
-  /** how this app page was opened: null (plain: show the sample), { new }, { template: id }, { open: id } or { recent: key } */
-  VO.launch = q.has('open') ? { open: q.get('open') } : q.has('recent') ? { recent: q.get('recent'), draft: q.has('draft') }
+  /** how this app page was opened: null (plain: show the sample), { wopi }, { new }, { template: id }, { open: id } or { recent: key } */
+  VO.launch = window.__VO_WOPI__ ? { wopi: true } : q.has('open') ? { open: q.get('open') } : q.has('recent') ? { recent: q.get('recent'), draft: q.has('draft') }
     : q.has('template') ? { template: q.get('template') } : q.has('new') ? { new: true } : null;
 
   let current = null;   // { app, hooks }
   /** an app is ready: open the file it was launched with, if any, then show the Document Recovery pane when
    *  other documents of this app have unsaved changes.
-   *  hooks: open(file, { draft, name, saved }), thumb() -> a canvas (or image) of the first page, message(text),
+   *  hooks: open(file, { draft, name, saved }), setReadOnly(on), thumb() -> a canvas (or image) of the first page, message(text),
    *  templates() -> [{ id, name }] (read by tools/templates.mjs); for autosave: snapshot(doc) -> Blob in the
    *  app's format, docInfo(doc) -> { name, draftName }, isDirty(doc), current() -> doc, autosave() -> false
    *  when turned off; showRecovery() opens the Document Recovery pane */
   VO.attach = async (app, hooks) => {
     current = { app, hooks: hooks || {} };
+    if (VO.wopi && VO.wopi.active) {
+      try { await VO.wopi.attach(app, current.hooks); }
+      catch (e) { console.error(e); (current.hooks.message || alert)(`The WOPI file could not be opened. ${e.message || e}`); }
+      return;
+    }
     VO.recent.refresh();
     const l = VO.launch;
     if (l && !l.new) {
@@ -335,12 +346,14 @@
   /** the app opened a file (from any source) as doc */
   VO.opened = (file, doc) => {
     if (!current) return;
+    if (file.voWopi && VO.wopi) { VO.wopi.opened(doc); return; }
     if (file.voDraft) { bind(doc, file.voDraft); return; }   // an unsaved version: keep its entry as it is
     VO.recent.put(current.app, file.name, file, true).then((key) => { if (key) bind(doc, key); thumbLater(key); }, (e) => console.warn('recent files:', e));
   };
   /** the app saved doc in its own format as name: that is its entry now, without unsaved changes */
   VO.saved = (name, blob, doc) => {
     if (!current) return;
+    if (VO.wopi && VO.wopi.active) return;
     const old = doc && docKeys.get(doc);
     if (doc) clearTimeout(timers.get(doc));
     VO.recent.put(current.app, name, blob, false).then(async (key) => {
@@ -352,6 +365,7 @@
   };
   /** doc has new unsaved changes: its unsaved version is written a little later */
   VO.changed = (doc) => {
+    if (VO.wopi && VO.wopi.active) { VO.wopi.changed(); return; }
     if (!current || !doc || !current.hooks.snapshot) return;
     clearTimeout(timers.get(doc));
     timers.set(doc, setTimeout(() => saveDraft(doc), Math.max(DRAFT_DELAY, slow.get(doc) || 0)));

@@ -9,6 +9,7 @@
 
   /* ------------------------------------------------------------ state */
   G.wb = null;
+  G.readOnly = false;
   G.zoomOf = (sh) => (sh.view.zoom || 100) / 100;
   G.state = { marquee: null, hl: null, fillTo: null, dragTo: null, pages: null };
   let wrap, canvas, layer, vbar, hbar, inp;
@@ -452,6 +453,7 @@
     G.focus();
     const s = G.sel();
     const sh = G.sheet();
+    if (G.readOnly && ['colres', 'rowres', 'pbreak', 'fill', 'border'].includes(z.kind)) return;
     switch (z.kind) {
       case 'corner': G.selectAll(); return;
       case 'colres': beginDrag(e, { kind: 'colres', c: z.c, x0: p.x, w0: LY.geo(sh).cols.size(z.c) * G.zoomOf(sh) }); return;
@@ -709,6 +711,7 @@
     return [r];
   }
   function onDblClick(e) {
+    if (G.readOnly) return;
     if (e.target.closest('.gobj, .af-btn, .dv-btn, .cmt-box, .sb')) return;
     const z = zone(pt(e));
     const sh = G.sheet();
@@ -791,6 +794,7 @@
     wrap.addEventListener('pointermove', mv); wrap.addEventListener('pointerup', up); wrap.addEventListener('pointercancel', up);
   }
   function onContext(e) {
+    if (G.readOnly) { e.preventDefault(); return; }
     if (e.target.closest('.gobj')) return;
     e.preventDefault();
     const z = zone(pt(e));

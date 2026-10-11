@@ -239,6 +239,7 @@
   };
   /** Offer a generated file to the user as a download. Returns 'saved'. */
   L.saveFile = async function (name, blob) {
+    if (window.VO && VO.wopi && VO.wopi.handles(name)) return VO.wopi.save(name, blob);
     const url = URL.createObjectURL(blob);
     const a = L.h('a', { href: url, download: name, style: 'display:none' });
     document.body.appendChild(a);

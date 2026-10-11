@@ -33,6 +33,16 @@ input, select, textarea { font: inherit; color: var(--ink); }
 .cs-pop .m-item.dis .cs-where { color: inherit; }
 .cs-none { padding-left: 28px; }
 .toolbars { display: flex; flex-direction: column; gap: 0; padding: 0 2px 2px; }
+
+/* A WOPI view/read-only launch is a document viewer, not an editor. Keep navigation, the document,
+   sheet/slide selectors, view controls and status bar; remove controls whose purpose is editing. */
+[data-wopi="readonly"] .cmdbars,
+[data-wopi="readonly"] .drawrow,
+[data-wopi="readonly"] .taskpane,
+[data-wopi="readonly"] .fbar,
+[data-wopi="readonly"] .notes,
+[data-wopi="readonly"] #split-notes { display: none !important; }
+[data-wopi="readonly"] .gridwrap .gobj { pointer-events: none !important; }
 .tb-row { display: flex; flex-wrap: wrap; align-items: stretch; gap: 2px 3px; min-height: 26px; }
 .toolbar { display: inline-flex; align-items: center; height: 26px; padding: 0 2px 0 0; border-radius: 3px; border-bottom: 1px solid var(--tb-border); border-right: 1px solid var(--tb-edge);
   background: linear-gradient(var(--tb-a), var(--tb-b) 50%, var(--tb-c)); max-width: 100%; overflow-x: auto; overflow-y: hidden; scrollbar-width: none; flex: none; }
