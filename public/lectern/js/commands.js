@@ -124,7 +124,7 @@
   C('fontColor', { label: 'Font Color', icon: 'fontColor', tip: 'Font Color', enabled: textCtx, swatch: () => A().lastFontColorHex(), run: () => A().applyFontColor(A().lastFontColor) });
   C('fillColor', { label: 'Fill Color', icon: 'fillColor', tip: 'Fill Color', enabled: hasSel, swatch: () => A().lastFillHex(), run: () => A().applyFill(A().lastFill) });
   C('lineColor', { label: 'Line Color', icon: 'lineColor', tip: 'Line Color', enabled: hasSel, swatch: () => A().lastLineHex(), run: () => A().applyLineColor(A().lastLineColor) });
-  C('painter', { label: 'Format Painter', icon: 'painter', tip: 'Format Painter', enabled: () => hasSel() || (E().tool && E().tool.kind === 'painter'), checked: () => !!(E().tool && E().tool.kind === 'painter'), run: (arg, ev) => A().formatPainter(ev && ev.detail === 2) });
+  C('painter', { label: 'Format Painter', icon: 'painter', tip: 'Format Painter', enabled: () => hasSel() || A().painter.on(), checked: () => A().painter.on(), run: (arg, ev) => A().painter.click(ev) });
   C('showFormatting', { label: 'Show Formatting', icon: 'showFormatting', checked: () => !A().opts.outlinePlain, run: () => { A().opts.outlinePlain = !A().opts.outlinePlain; L.panes.left.render(); } });
   C('expandAll', { label: 'Expand All', icon: 'expandAll', run: () => L.panes.left.setTab('outline') });
   C('summarySlide', { label: 'Summary Slide', icon: 'summary', tip: 'Summary Slide', run: () => A().summarySlide() });

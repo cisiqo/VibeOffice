@@ -516,12 +516,6 @@
     if (s) {
       if (TE.pending && (s.p0 !== TE.pending.at.p || s.o0 !== TE.pending.at.o || !T.collapsed(s))) TE.pending = null;
       TE.lastSel = s;
-      if (E.tool && E.tool.kind === 'painter' && !T.collapsed(s) && !TE._painting) {
-        TE._painting = true;
-        const fmt = E.tool.fmt;
-        const done = () => { document.removeEventListener('pointerup', done); TE._painting = false; const s2 = TE.getSel(); if (s2 && !T.collapsed(s2) && fmt.run) { TE.applyRun((r) => Object.assign({}, r, fmt.run), 'Format Painter', s2); if (!E.tool.sticky) E.setTool(null); } };
-        document.addEventListener('pointerup', done);
-      }
       L.ui.refresh();
     }
   });

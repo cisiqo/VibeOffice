@@ -1,0 +1,45 @@
+// VibeOfficeSetup.exe's resources (build.rs compiles them with windres; VO_FILEVERSION and VO_VERSION come from there)
+#include <windows.h>
+
+1 ICON "../icons/icon.ico"
+CREATEPROCESS_MANIFEST_RESOURCE_ID RT_MANIFEST "setup.manifest"
+
+// The install dialog (src/main.rs fills in the heading, the text and the button)
+1 DIALOGEX 0, 0, 300, 152
+STYLE DS_MODALFRAME | DS_CENTER | WS_POPUP | WS_CAPTION | WS_SYSMENU
+CAPTION "VibeOffice Setup"
+FONT 9, "Segoe UI", 400, 0, 1
+BEGIN
+    ICON 1, -1, 14, 14, 21, 20
+    LTEXT "", 10, 46, 12, 242, 16
+    LTEXT "", 11, 46, 32, 242, 40
+    AUTOCHECKBOX "&Pin VibeOffice to the taskbar", 12, 46, 78, 242, 10
+    LTEXT "To pin VibeOffice to the taskbar, right-click it in the Start menu and choose Pin to taskbar.", 13, 46, 78, 242, 18, NOT WS_VISIBLE
+    AUTOCHECKBOX "&Open default app settings, in which you can set VibeOffice as default app by yourself.", 14, 46, 100, 242, 18, BS_MULTILINE | BS_TOP
+    DEFPUSHBUTTON "&Install", IDOK, 182, 128, 52, 15
+    PUSHBUTTON "Cancel", IDCANCEL, 238, 128, 52, 15
+END
+
+VS_VERSION_INFO VERSIONINFO
+FILEVERSION VO_FILEVERSION
+PRODUCTVERSION VO_FILEVERSION
+FILEOS VOS_NT_WINDOWS32
+FILETYPE VFT_APP
+BEGIN
+    BLOCK "StringFileInfo"
+    BEGIN
+        BLOCK "040904B0"
+        BEGIN
+            VALUE "CompanyName", "VibeOffice"
+            VALUE "FileDescription", "VibeOffice Setup"
+            VALUE "FileVersion", VO_VERSION
+            VALUE "OriginalFilename", "VibeOfficeSetup.exe"
+            VALUE "ProductName", "VibeOffice"
+            VALUE "ProductVersion", VO_VERSION
+        END
+    END
+    BLOCK "VarFileInfo"
+    BEGIN
+        VALUE "Translation", 0x409, 1200
+    END
+END

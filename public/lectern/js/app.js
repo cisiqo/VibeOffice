@@ -1232,13 +1232,14 @@ addEventListener('resize',fit);fit();show(0);<\/script></body></html>`], { type:
     TE.begin(tb.id, { atEnd: true });
     return true;
   };
-  A.formatPainter = function (sticky) {
-    if (E.tool && E.tool.kind === 'painter') { E.setTool(null); return; }
-    const fmt = E.pickFormat();
-    if (!fmt) return;
-    E.setTool({ kind: 'painter', fmt, sticky: !!sticky });
-    A.status(sticky ? 'Format Painter is locked on — press Esc to stop.' : 'Click an object or select text to apply the formatting.');
-  };
+  /* Format Painter: the editor paints when the mouse is let go (editor.js, paintOnRelease) */
+  A.painter = ui.brush({
+    el: () => E.scroller,
+    pick: () => E.pickFormat(),
+    apply: (fmt, id) => (id ? E.paintShape(id, fmt) : E.paintText(fmt)),
+    hint: 'Click an object or select text to apply the formatting.',
+    status: (t) => A.status(t),
+  });
   A.spelling = function () {
     A.opts.spell = true;
     A.saveOpts();

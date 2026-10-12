@@ -413,7 +413,7 @@
       if (link && !(L.editor && L.editor.active)) cls = 'cur-link';
       showCommentHover(z.r, z.c);
     } else showCommentHover(-1, -1);
-    if (G.painting) cls = 'painting';
+    if (L.app.painter.on()) cls = 'painting';
     setCursor(cls);
   }
   let curCls = 'cur-cell';
@@ -480,7 +480,7 @@
       case 'fill': beginDrag(e, { kind: 'fill', src: Object.assign({}, s.ranges[0]) }); return;
       case 'border': beginDrag(e, { kind: 'move', src: Object.assign({}, s.ranges[0]), grab: { r: z.r, c: z.c } }); return;
       case 'cell': {
-        if (G.painting) { beginDrag(e, { kind: 'paint' }); G.select(z.r, z.c, { noScroll: true }); return; }
+        if (L.app.painter.on()) { beginDrag(e, { kind: 'paint' }); G.select(z.r, z.c, { noScroll: true }); return; }
         if (e.shiftKey) G.extendTo(z.r, z.c, { noScroll: true });
         else G.select(z.r, z.c, { add: e.ctrlKey || e.metaKey, noScroll: true });
         const link = !e.shiftKey && !e.ctrlKey && sh.links.find((l) => M.rangeContains(l.ref, z.r, z.c));
@@ -687,7 +687,7 @@
           break;
         }
         case 'point': L.editor.pointEnd(); break;
-        case 'paint': if (G.painting) L.app.finishPaint(); break;
+        case 'paint': L.app.painter.release(); break;
         case 'cells': {
           if (!d.moved && d.link && !e.shiftKey) {
             /* a plain click on a hyperlink follows it */
@@ -858,7 +858,7 @@
       case 'F2': e.preventDefault(); if (shift) { L.app.editComment(); return; } if (!G.guardProtect(null, true)) ed.begin('edit'); return;
       case 'Delete': e.preventDefault(); L.ui.exec('clearContents'); return;
       case 'Backspace': e.preventDefault(); if (!G.guardProtect(null, true)) ed.begin('enter', ''); return;
-      case 'Escape': e.preventDefault(); if (G.state.marquee) { G.state.marquee = null; L.clip.clearMarquee(); G.paint(); } if (G.painting) L.app.finishPaint(true); return;
+      case 'Escape': e.preventDefault(); if (G.state.marquee) { G.state.marquee = null; L.clip.clearMarquee(); G.paint(); } return;
       case ' ':
         if (ctrl && shift) { e.preventDefault(); G.selectAll(); return; }
         if (ctrl) { e.preventDefault(); const rg = s.ranges[s.active]; s.ranges[s.active] = { r1: 0, c1: rg.c1, r2: MAXR - 1, c2: rg.c2 }; G.changed(); return; }

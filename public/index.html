@@ -43,6 +43,9 @@
   .new span small { color: var(--muted); }
   .new:hover b { text-decoration: underline; }
   .side .grow { flex: 1; }
+  .caching { padding: 2px 8px 4px; color: var(--muted); font-size: 11px; }
+  .caching progress { display: block; width: 100%; height: 8px; margin-top: 3px; accent-color: var(--sel); }
+  .caching #cachingsize { display: block; margin-top: 1px; text-align: right; }
   .side .note { margin: 0; padding: 0 8px; color: var(--muted); font-size: 11px; }
   .link { border: 0; background: none; padding: 0; color: var(--pane-link); cursor: pointer; text-decoration: underline; }
   .side .links { display: flex; flex-wrap: wrap; gap: 4px 12px; margin-top: -4px; }
@@ -172,6 +175,8 @@
     <div>
       <button class="big" id="update" type="button" hidden><svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="8.5" fill="#1f8a4c"/><path d="M10 5v7.5M6.5 9.5l3.5 3.5 3.5-3.5" fill="none" stroke="#fff" stroke-width="2"/><path d="M6 15.5h8" stroke="#fff" stroke-width="1.6"/></svg>Update VibeOffice</button>
       <button class="big" id="install" type="button" hidden><svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true"><rect x="2" y="3" width="16" height="12" rx="1.5" fill="#fff" stroke="#3b619c"/><path d="M10 5.5v6M7 9l3 3 3-3" fill="none" stroke="#1f8a4c" stroke-width="1.8"/><path d="M6 17.5h8" stroke="#3b619c"/></svg>Install VibeOffice.work</button>
+      <div class="caching" id="caching" role="status" hidden><span id="cachingtext">Updating cached resources</span><progress id="cachingbar" max="1" value="0"></progress><span id="cachingsize"></span></div>
+      <button class="big" id="cachingreload" type="button" hidden><svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="8.5" fill="#1f8a4c"/><path d="M14 7.2A4.6 4.6 0 1 0 14.6 11" fill="none" stroke="#fff" stroke-width="1.8"/><path d="M14.8 4.4v3.6h-3.6" fill="none" stroke="#fff" stroke-width="1.8"/></svg>Update done, reload</button>
       <a class="big" id="feedback" href="https://github.com/tcchen2026/VibeOffice" target="_blank" rel="noopener"><svg width="20" height="20" viewBox="0 0 16 16" aria-hidden="true"><path fill="#24292f" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>Feedback on our GitHub</a>
     </div>
     <p class="note">Your files stay on this computer. Recent files are kept in this browser only.<br><span class="version"></span></p>
@@ -424,6 +429,21 @@
     }
   };
   $('themes').addEventListener('click', () => { drawLooks(); $('themesdlg').showModal(); });
+
+  /* The web edition's service worker caching a version of the site (sw.js, 'vo-cache' from common/suite.js):
+     a progress bar above the GitHub button while it works, with the megabytes downloaded; after an update, a
+     button to reload this page in the new version (a first visit's page is already the cached version) */
+  const mb = (bytes) => (bytes / 1048576).toFixed(1);
+  window.addEventListener('vo-cache', (e) => {
+    const d = e.detail || {};
+    $('caching').hidden = d.state !== 'progress';
+    $('cachingreload').hidden = !(d.state === 'done' && d.update);
+    if (d.state !== 'progress') return;
+    $('cachingtext').textContent = d.update ? 'Updating cached resources' : 'Caching resources for offline use';
+    $('cachingsize').textContent = d.total ? `${mb(d.received || 0)} of ${mb(d.total)} MB` : d.received ? `${mb(d.received)} MB` : '';
+    $('cachingbar').value = d.progress || 0;
+  });
+  $('cachingreload').addEventListener('click', () => location.reload());
 
   /* Updates (desktop app): an Update button, or once a day a dialog, when updater/current.json asks for it */
   const download = () => VO.host.openUrl(VO.updateUrl()).catch((e) => status(String(e)));

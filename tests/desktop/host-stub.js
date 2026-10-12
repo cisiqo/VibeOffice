@@ -1,10 +1,16 @@
 // The desktop host (desktop/src/host.rs) as seen by the pages, for Chromium: run before each page's
 // scripts with  node tools/shot.mjs '' steps.json --pre tests/desktop/host-stub.js
 // The app was "started with" Budget.csv (not with ?nolaunch); launch files are taken once per tab, as once per process there.
+// __stubSecondStart(name, text): another start of the app hands this one a file (main.rs, second_start).
 // Records in sessionStorage: hostCalls (each command), opened (host_open_url), uiScale, newWindow, closed
 // (host_close_window), swRegister (service worker registrations).
 (() => {
   const files = [{ name: 'Budget.csv', text: 'Item,Cost\nRent,900\nFood,250\n' }];
+  const later = [];   // handles a second start handed over
+  window.__stubSecondStart = (name, text) => {
+    later.push(files.push({ name, text }) - 1);
+    window.dispatchEvent(new Event('vo-files'));
+  };
   const log = (k) => { sessionStorage[k] = (sessionStorage[k] ? sessionStorage[k] + ' ' : '') + location.pathname; };
   // ?update=button / ?update=dialog: updater/current.json asks this version to update; otherwise the site's own file
   const ask = (/update=(button|dialog)/.exec(location.search) || [])[1];
@@ -21,9 +27,12 @@
     async invoke(cmd, args) {
       log('hostCalls');
       if (cmd === 'host_launch_files') {
-        if (sessionStorage.hostLaunched || /nolaunch/.test(location.search)) return [];
-        sessionStorage.hostLaunched = '1';
-        return files.map((f, handle) => ({ handle, name: f.name }));
+        const handles = later.splice(0);
+        if (!sessionStorage.hostLaunched && !/nolaunch/.test(location.search)) {
+          sessionStorage.hostLaunched = '1';
+          handles.unshift(0);
+        }
+        return handles.map((handle) => ({ handle, name: files[handle].name }));
       }
       if (cmd === 'host_read') {
         if (!files[args.handle]) throw `no file with handle ${args.handle}`;

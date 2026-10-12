@@ -69,6 +69,17 @@ Classic must not change when only the theme machinery changes: compare screensho
 
 ## SmartArt
 
+`node --test tests/painter.test.mjs` checks the Format Painter (docs/suite.md, Brushes) in each app with real mouse input, CDP Input events paced like a hand (synthetic DOM events hide when an app acts mid-drag): it paints the dragged text, cells or object once the mouse is let go, a clicked word, keeps a double-clicked painter on until Esc, keeps links, and in Lectern keeps the text being edited and paints text in another box. It observes what the user sees (the brush cursor, the formatting), so it also runs against an older copy of `public/` served on another port (`BASE=…`).
+
+`node --test tests/sw.test.mjs` checks the service worker (docs/suite.md, Service worker) in the Chromium at :9222, on copies of `public/` staged in `./tmp/sw-test` by `tools/web-release.sh` and served on 127.0.0.1 by a server of the test's own (it redirects `index.html` to its folder, like the published site): the first install and its progress (bytes too), the cached files' `Content-Type`, the Start Center's bar with its megabytes and its *Update done, reload* button (which reloads the open page in the new version), the Start Center and Quire offline, an update that fetches the new version's zip and nothing else while an open page keeps its version and a new page gets the new one, the old cache going once its page has closed, a damaged zip (one byte changed) failing the install, and no worker on any other origin (the same server as `localhost`). It clears the test origin's storage at the end. `SW_TEST_LOG=1` prints the tabs it opens and the pages it loads.
+
+To try the worker by hand, serve a published copy on another 127.0.0.1 port (the dev server's own files are unstamped, so the worker caches nothing on :8760):
+
+    rm -rf tmp/site && cp -r public tmp/site && tools/web-release.sh tmp/site v2026.10.11-000001
+    python3 tools/serve.py 8770 tmp/site
+
+and open http://127.0.0.1:8770/. For an update, stop the server, stage again with a later version (`…-000002`, after an edit to see it change) and serve that: the open Start Center shows *Updating cached resources* and then *Update done, reload*. With the server stopped the pages still open (offline). Afterwards clear the site's data (DevTools ▸ Application ▸ Storage ▸ Clear site data), or it goes on serving that copy.
+
 `node --test tests/smartart.test.mjs` runs the layout engine (`public/common/smartart.js`) in Node: every layout, for 1 to 7 items, gives finite shapes inside the box, one shape per item it shows, and one text size within the limits. A change to the SmartArt writer (`public/lectern/js/smartart-io.js`, `diagramFrameXML` in `pptx-write.js`) is checked on a deck with one diagram per layout: save it from Lectern, run the Open XML SDK validator and `tools/ooxml/package.py check` on it, convert it with LibreOffice to PDF (does every diagram draw, with no word broken) and to PPTX, and reopen both copies in Lectern (every diagram editable again). Keep the decks and renders in `./tmp`.
 
 `python3 tests/lectern/smartart-office.py OUT [name]` checks SmartArt that PowerPoint made, in the corpus decks whose layouts Lectern has: unedited saves keep every diagram part byte-identical, an edit through the items gives a save with no new `package.py` findings, and that save reopens with the diagram editable (`OUT/results.json`). It removes the Recent Files entries it makes; run the SDK validator on `OUT/*-edited.pptx` too.
@@ -80,6 +91,7 @@ Classic must not change when only the theme machinery changes: compare screensho
 | `node tests/quire/mdspec.js DIR` | The Markdown reader against the CommonMark spec examples and the GFM extension examples (in Node). DIR holds `spec.json` (https://spec.commonmark.org/0.31.2/spec.json), cmark-gfm's `test/spec.txt` saved as `gfm-spec.txt`, and the WHATWG `entities.json` |
 | `node tests/quire/mdroundtrip.mjs DIR` | Markdown round trips in Quire (through `shot.mjs`): every `.md` in DIR saved unchanged (must be byte for byte the same), with one paragraph edited (only that block may change), and fully rewritten (same HTML). `--spec spec.json` runs the rewrite check on the spec examples |
 | `python3 tests/quire/loss-audit.py originals/ saved/ out.json` | What a save loses: each original `.docx` against Quire's saved copy, feature by feature and word by word (standard library only); results in docs/quire.md |
+| `node tests/quire/mouse-selection.mjs` | Real mouse input (CDP, paced like a hand): the highlighter applies when the mouse is let go, to the whole dragged selection, as one undo step, and a drawn shape's handles go when the user clicks into text or presses Esc (the Format Painter: `tests/painter.test.mjs`) |
 
 Run both after a change to `markdown.js` or `mdio.js`; the numbers are in docs/quire.md.
 

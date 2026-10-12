@@ -16,9 +16,31 @@ serde_json = "1"
 # The system's Open, Save and folder dialogs (GTK on Linux, which uses the portals inside Flatpak)
 rfd = { version = "0.17", default-features = false, features = ["gtk3", "common-controls-v6"] }
 
-# ShellExecuteW for links (already built for Tauri, so this adds nothing)
+# ShellExecuteW for links; the installation (src/installation.rs, src/installed.rs, setup/): registry,
+# shortcuts, the uninstall dialog, taskbar pinning. Already built for Tauri, so this adds little.
 [target.'cfg(windows)'.dependencies]
-windows = { version = "0.62", features = ["Win32_UI_Shell", "Win32_UI_WindowsAndMessaging"] }
+windows = { version = "0.62", features = [
+    "Foundation",
+    "UI_Shell",
+    "Win32_Foundation",
+    "Win32_Storage_EnhancedStorage",
+    "Win32_Storage_FileSystem",
+    "Win32_System_Com",
+    "Win32_System_Com_StructuredStorage",
+    "Win32_System_Diagnostics_ToolHelp",
+    "Win32_System_LibraryLoader",
+    "Win32_System_Registry",
+    "Win32_System_Threading",
+    "Win32_System_Variant",
+    "Win32_UI_Controls",
+    "Win32_UI_Shell",
+    "Win32_UI_Shell_PropertiesSystem",
+    "Win32_UI_WindowsAndMessaging",
+] }
+# The taskbar pin request's answer (what windows' IAsyncOperation is)
+windows-future = "0.3"
+# One VibeOffice per user session: a second start hands its files to the running one (Tauri's own plugin)
+tauri-plugin-single-instance = "2.5.3"
 
 [features]
 # Embed public/ in the exe. `--no-default-features` loads devUrl (tools/serve.py) instead.
@@ -31,3 +53,7 @@ lto = true
 codegen-units = 1
 panic = "abort"
 strip = true
+
+# setup/: the Windows installer, carrying this app (build.sh)
+[workspace]
+members = [".", "setup"]

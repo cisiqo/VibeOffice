@@ -676,6 +676,67 @@
       .done.then(() => cb(ok ? cur : null));
   };
 
+  /* ---------- brushes ---------- */
+  /* A brush (Format Painter, highlighter) is a mode that acts on what the user marks with the mouse, once,
+   * when the mouse button is let go: never while a selection is still being dragged out. A click on its
+   * button arms it for one use, or ends it; a double-click keeps it on until the button again or Esc. One
+   * brush is on at a time. The app gives
+   *   el()           the element that shows the brush cursor (class 'painting')
+   *   pick()         what the brush carries, e.g. the formatting at the selection; null: nothing to carry
+   *   apply(v, ...)  paint what the user marked with v; true when something was painted
+   *   hint, status   optional: status(hint) while it is on, status('') after
+   * and calls brush.release(...) when the user lets go of the mouse over what they marked. */
+  let liveBrush = null;
+  ui.brush = function (o) {
+    const b = {
+      value: null,
+      sticky: false,
+      on: () => liveBrush === b,
+      /** arm it (value: carry this instead of pick()) */
+      start(sticky, value) {
+        const v = value !== undefined ? value : o.pick();
+        if (v == null) return false;
+        if (liveBrush && liveBrush !== b) liveBrush.stop();
+        liveBrush = b;
+        b.value = v;
+        b.sticky = !!sticky;
+        o.el().classList.add('painting');
+        if (o.status) o.status(o.hint || '');
+        ui.refresh();
+        return true;
+      },
+      stop() {
+        if (liveBrush !== b) return;
+        liveBrush = null;
+        b.value = null;
+        b.sticky = false;
+        o.el().classList.remove('painting');
+        if (o.status) o.status('');
+        ui.refresh();
+      },
+      /** its button: the second click of a double-click keeps it on */
+      click(ev) {
+        if (ev && ev.detail === 2) { if (b.on()) { b.sticky = true; if (o.status) o.status(o.hint || ''); } else b.start(true); }
+        else if (b.on()) b.stop();
+        else b.start(false);
+      },
+      release(...args) {
+        if (!b.on()) return false;
+        const done = !!o.apply(b.value, ...args);
+        if (done && !b.sticky) b.stop();
+        return done;
+      },
+    };
+    return b;
+  };
+  ui.brushOn = () => liveBrush;
+  if (typeof document !== 'undefined') document.addEventListener('keydown', (e) => {
+    if (e.key !== 'Escape' || !liveBrush || ui.dialogOpen() || ui.menuOpen()) return;
+    e.preventDefault();
+    e.stopPropagation();
+    liveBrush.stop();
+  }, true);
+
   /* ---------- status bar & misc ---------- */
   /** a short notice at the bottom; action: { label, run } adds a button to it (e.g. Browse) */
   ui.toast = (text, ms, action) => {

@@ -1,6 +1,12 @@
 /* VibeOffice — ZIP container engine (read + write), no dependencies; shared by Quire, Ledger and Lectern.
  * Uses the browser's Compression Streams when present and ships a small pure-JS inflater, so Office
  * Open XML packages open in any modern browser (and in Node, for the tests).
+ *
+ * Also loaded by the service worker (public/sw.js, importScripts), which unpacks the whole published site
+ * from updater/web-<version>.zip with read(), entry.bytes(), entry.usize, entry.crc and crc32(). Careful when
+ * editing: it runs there with no window or DOM (only self/globalThis), a change to it is a change to the
+ * worker (browsers reinstall it), and a bug here can stop the site from caching or updating for every
+ * visitor. Keep those members working, and check tests/sw.test.mjs as well as the apps.
  */
 (function (root) {
   'use strict';
@@ -152,9 +158,10 @@
   }
 
   /* ---------- reader ---------- */
-  function makeEntry(u8, dv, name, method, csize, usize, loff, dataStart) {
+  /* crc: the CRC-32 the central directory records (undefined for an entry found by the repair path) */
+  function makeEntry(u8, dv, name, method, csize, usize, loff, dataStart, crc) {
     return {
-      name, method, csize, usize, loff,
+      name, method, csize, usize, loff, crc,
       async bytes() {
         if (this._cache) return this._cache;
         let start = dataStart;
@@ -205,6 +212,7 @@
       if (p + 46 > u8.length || dv.getUint32(p, true) !== 0x02014b50) break;
       const flags = dv.getUint16(p + 8, true);
       const method = dv.getUint16(p + 10, true);
+      const crc = dv.getUint32(p + 16, true);
       let csize = dv.getUint32(p + 20, true);
       let usize = dv.getUint32(p + 24, true);
       const nlen = dv.getUint16(p + 28, true), xlen = dv.getUint16(p + 30, true), clen = dv.getUint16(p + 32, true);
@@ -223,7 +231,7 @@
         xp += 4 + sz;
       }
       p += 46 + nlen + xlen + clen;
-      addEntry(files, makeEntry(u8, dv, name, method, csize, usize, loff));
+      addEntry(files, makeEntry(u8, dv, name, method, csize, usize, loff, undefined, crc));
     }
     return files.size ? files : null;
   }

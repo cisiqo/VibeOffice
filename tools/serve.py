@@ -1,7 +1,10 @@
 #!/usr/bin/env python3
 """Local dev server for public/ that never lets the browser cache anything.
 
-    python3 tools/serve.py [port]      (default 8765, bound to 127.0.0.1)
+    python3 tools/serve.py [port] [folder]     (default 8760 and public/, bound to 127.0.0.1)
+
+folder: another copy of the site instead, e.g. a published copy (tools/web-release.sh) on a port of its own, to try
+the service worker, which caches on 127.0.0.1 only what is stamped with a version (docs/testing.md).
 
 Every response carries Cache-Control: no-store, and conditional requests are
 ignored, so edited HTML/JS modules are always re-fetched on reload.
@@ -20,7 +23,8 @@ import os
 import re
 import sys
 
-ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'public')
+ROOT = (os.path.abspath(sys.argv[2]) if len(sys.argv) > 2
+        else os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'public'))
 ISSUES = os.path.realpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'issues'))
 PORT = int(sys.argv[1]) if len(sys.argv) > 1 else 8760
 MAX_BODY = 32 * 1024 * 1024

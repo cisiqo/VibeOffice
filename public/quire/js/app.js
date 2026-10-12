@@ -184,7 +184,7 @@
       },
     }], anchor ? anchor.getBoundingClientRect() : r, { cls: 'color-menu' });
   }
-  A.applyHighlight = (n) => { if (E.collapsed()) { A.highlighter = n; L.$('#scroller').classList.add('painting'); A.status('Select text to highlight. Press Esc to stop.'); return; } E.formatRun({ hl: n === 'none' ? undefined : n }, 'Highlight'); };
+  A.applyHighlight = (n) => { if (E.collapsed()) { A.highlighter.start(true, n); return; } E.formatRun({ hl: n === 'none' ? undefined : n }, 'Highlight'); };
   function fontColorDD(r, anchor) {
     ui.colorMenu(anchor || r, { mode: 'font' }, (v) => {
       if (v && v.auto) A.applyFontColor('auto');
@@ -637,8 +637,7 @@
     const w = A.docs[i];
     A.cur = i;
     if (LY.hfEdit) { LY.hfEdit = null; LY.root.classList.remove('hfmode'); }
-    L.drawing.clearSelection();
-    E.objSel = null;
+    E.clearObjSel();
     D.doc = w.doc;
     D.setHistState(w.hist);
     A.fileName = w.fileName; A.saved = w.saved; A.fileType = w.fileType; A.hasRevisions = w.hasRevisions;
@@ -656,8 +655,7 @@
     opts = opts || {};
     if (opts.newWindow || A.cur < 0) { stash(); A.docs.push(null); A.cur = A.docs.length - 1; }
     if (LY.hfEdit) { LY.hfEdit = null; LY.root.classList.remove('hfmode'); }
-    L.drawing.clearSelection();
-    E.objSel = null;
+    E.clearObjSel();
     D.doc = d;
     D.resetHistory();
     d.dirty = false;
@@ -1119,8 +1117,6 @@
     const inEditor = tgt && tgt.closest && (tgt.closest('#pages') || tgt.closest('.ed-host'));
     const inInput = tgt && (tgt.tagName === 'INPUT' || tgt.tagName === 'TEXTAREA' || tgt.tagName === 'SELECT');
     if (e.key === 'Escape') {
-      if (A.highlighter) { A.highlighter = null; L.$('#scroller').classList.remove('painting'); A.status(''); return; }
-      if (A.painter) { A.painter = null; L.$('#scroller').classList.remove('painting'); return; }
       if (A.view === 'preview' || A.view === 'reading') { A.setView(A.prevView || 'print'); return; }
       if (L.$('#app').classList.contains('fullscreen')) { ui.exec('fullScreen'); return; }
       if (LY.hfEdit) { A.closeHeaderFooter(); return; }
@@ -1166,7 +1162,8 @@
 
   /* ================= wiring ================= */
   function wire() {
-    L.bus.on('sel', () => { A.updateStatus(); ui.refresh(); if (L.rulers) L.rulers.drawSoon(); if (A.highlighter && !E.collapsed() && !A.hlBusy) { A.hlBusy = true; setTimeout(() => { if (!E.collapsed()) E.formatRun({ hl: A.highlighter === 'none' ? undefined : A.highlighter }, 'Highlight'); A.hlBusy = false; }, 0); } if (A.painter && !E.collapsed()) A.applyPainter(); });
+    L.bus.on('sel', () => { A.updateStatus(); ui.refresh(); if (L.rulers) L.rulers.drawSoon(); });
+    L.bus.on('sel-done', () => { A.painter.release(); A.highlighter.release(); });
     L.bus.on('objsel', () => { A.updateToolbars(); ui.refresh(); });
     L.bus.on('doc-changed', () => { if (window.VO) VO.changed(doc()); A.updateStatus(); ui.refresh(); if (doc().settings.track || Object.keys(doc().comments).length) A.updateToolbars(); });
     L.bus.on('layout-done', () => { A.updateStatus(); if (L.rulers) L.rulers.drawSoon(); if (L.drawing) L.drawing.placeHandles(); E.placeHandles(); });
@@ -1174,34 +1171,42 @@
     LY.scroller.addEventListener('scroll', () => { if (L.rulers) L.rulers.drawSoon(); });
     window.addEventListener('beforeunload', (e) => { const any = (doc() && doc().dirty) || A.docs.some((w, i) => i !== A.cur && w && w.doc && w.doc.dirty); if (any) { e.preventDefault(); e.returnValue = ''; } });
     window.addEventListener('resize', L.debounce(() => { if (A.view === 'web') LY.render(); else LY.fitSizer(); if (L.rulers) L.rulers.draw(); }, 200));
-    LY.root.addEventListener('mouseup', () => { if (A.painter && !E.collapsed()) A.applyPainter(); });
     document.addEventListener('keydown', (e) => { LY.root.classList.toggle('ctrl', e.ctrlKey || e.metaKey); });
     document.addEventListener('keyup', (e) => { LY.root.classList.toggle('ctrl', e.ctrlKey || e.metaKey); });
   }
 
   /* ================= format painter ================= */
-  A.startPainter = function (sticky) {
-    if (!E.sel) return;
-    A.painter = { rPr: L.clone(E.curRun()), pPr: L.clone(E.sel.f.p.pPr), sticky: !!sticky, whole: !E.collapsed() && E.range()[0].o === 0 };
-    delete A.painter.rPr.link; delete A.painter.rPr.ins; delete A.painter.rPr.del;
-    L.$('#scroller').classList.add('painting');
-    A.status('Select the text to apply the formatting to.');
-    ui.refresh();
-  };
-  A.applyPainter = function () {
-    const pt = A.painter;
-    if (!pt || E.collapsed()) return;
-    const [a, b] = E.range();
-    const keep = E.sel;
-    const src = pt.rPr;
+  const PAINTED = ['font', 'sz', 'b', 'i', 'u', 'uColor', 'strike', 'dstrike', 'color', 'hl', 'caps', 'smallCaps', 'vert', 'spacing', 'shd', 'style'];
+  /** the formatting at the selection, as the Format Painter and Copy Formatting carry it */
+  A.pickFormat = () => (E.sel ? { rPr: L.clone(E.curRun()), pPr: L.clone(E.sel.f.p.pPr) } : null);
+  /** put fmt on the selection, or on the word a click landed in (Word behaviour); false: nothing to paint.
+      The character formatting replaces the target's; its links and revisions stay. */
+  A.paintFormat = function (fmt) {
+    if (!E.sel) return false;
+    let [a, b] = E.range();
+    if (E.collapsed()) {
+      const w = O.wordAt(E.sel.f);
+      if (!w || !(w[0].o < a.o && a.o < w[1].o)) return false;
+      [a, b] = w;
+    }
+    const keep = E.sel, src = fmt.rPr;
     E.edit('Format Painter', () => {
-      O.formatRange(a, b, () => { const r = {}; for (const k of ['font', 'sz', 'b', 'i', 'u', 'uColor', 'strike', 'dstrike', 'color', 'hl', 'caps', 'smallCaps', 'vert', 'spacing', 'shd', 'style']) if (src[k] !== undefined) r[k] = L.clone(src[k]); return r; });
-      if (a.p !== b.p || (a.o === 0 && b.o >= D.plen(b.p))) O.setParaProps(E.selectedParas(), () => L.clone(pt.pPr));
+      O.formatRange(a, b, (r) => { for (const k of PAINTED) { if (src[k] !== undefined) r[k] = L.clone(src[k]); else delete r[k]; } return r; });
+      if (a.p !== b.p || (a.o === 0 && b.o >= D.plen(b.p))) O.setParaProps(E.selectedParas(), () => L.clone(fmt.pPr));
       return keep;
     });
-    if (!pt.sticky) { A.painter = null; L.$('#scroller').classList.remove('painting'); }
     ui.refresh();
+    return true;
   };
+  /* the brushes paint when the mouse is let go ('sel-done'), not while a selection is being dragged out */
+  A.painter = ui.brush({ el: () => L.$('#scroller'), pick: A.pickFormat, apply: A.paintFormat, hint: 'Select the text to apply the formatting to.', status: (t) => A.status(t) });
+  A.highlighter = ui.brush({
+    el: () => L.$('#scroller'),
+    pick: () => A.lastHighlight,
+    apply: (n) => { if (E.collapsed()) return false; E.formatRun({ hl: n === 'none' ? undefined : n }, 'Highlight'); return true; },
+    hint: 'Select text to highlight. Press Esc to stop.',
+    status: (t) => A.status(t),
+  });
 
   /* ================= sample document ================= */
   A.buildSample = function () {

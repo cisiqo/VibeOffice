@@ -169,7 +169,7 @@
   cmd('fillColorApply', { label: 'Fill Color', tip: 'Fill Color', icon: 'fillColor', swatch: () => A().lastFill || '#FFFF00', run: run(() => A().applyFill(A().lastFill || '#FFFF00')) });
   cmd('fontColorApply', { label: 'Font Color', tip: 'Font Color', icon: 'fontColor', swatch: () => A().lastFontColor || '#FF0000', run: run(() => A().applyFontColor(A().lastFontColor || '#FF0000')) });
   cmd('bordersApply', { label: 'Borders', tip: 'Borders', icon: 'bordersBottom', run: run(() => A().applyBorderPreset(A().lastBorder || 'bottom')) });
-  cmd('formatPainter', { label: 'Format Painter', tip: 'Format Painter', icon: 'painter', checked: () => !!G().painting, run: () => A().startPaint() });
+  cmd('formatPainter', { label: 'Format Painter', tip: 'Format Painter', icon: 'painter', checked: () => A().painter.on(), run: (arg, ev) => A().painter.click(ev) });
   /* number format shortcuts */
   cmd('fmtGeneral', { label: 'General', key: 'Ctrl+Shift+~', run: fmt({ nf: 'General' }, 'Format') });
   cmd('fmtCurrency', { label: 'Currency', key: 'Ctrl+Shift+$', run: fmt({ nf: '"$"#,##0.00_);[Red]\\("$"#,##0.00\\)' }, 'Format') });

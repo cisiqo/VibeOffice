@@ -381,24 +381,26 @@
       L.ui.exec(map[act.dataset.contentAct], { ph: sid });
       return;
     }
-    if (E.tool && e.button === 0 && E.tool.kind !== 'painter') { startTool(e); return; }
+    if (E.tool && e.button === 0) { startTool(e); return; }
     const hd = tgt.dataset && tgt.dataset.h;
     if (hd && e.button === 0) { startHandle(e, hd, tgt.dataset.sid); return; }
     /* inside the active text editor → native caret handling */
     if (E.editing() && L.te.contains(tgt)) {
       if (e.button === 0 && L.te.target().sh.type === 'table') startCellSelect(e);
+      if (e.button === 0) paintOnRelease();
       return;
     }
     /* elsewhere inside the box being edited (its margins, the space under the text): place the caret and
        drag to select text, as PowerPoint does; the hatched ring around it moves the box */
     const st = L.te.state;
-    if (st && !st.cell && e.button === 0 && st.el.contains(tgt)) { startTextSelect(e, st); return; }
+    if (st && !st.cell && e.button === 0 && st.el.contains(tgt)) { startTextSelect(e, st); paintOnRelease(); return; }
     const hit = shapeHit(tgt);
     if (e.button === 2) {
       if (hit) { const id = pickId(hit); if (!E.sel.includes(id)) E.select([id]); }
       return;
     }
     if (!hit) {
+      L.app.painter.stop(); /* a click beside the objects puts the brush down, kept on or not (as Impress) */
       if (E.editing()) L.te.end();
       if (!e.shiftKey && !e.ctrlKey) E.clearSel();
       E.refocus();
@@ -407,7 +409,7 @@
     }
     e.preventDefault();
     const id = pickId(hit);
-    if (E.tool && E.tool.kind === 'painter') { E.applyPainter(id); return; }
+    if (L.app.painter.on()) { paintPress(e, id); return; }
     const wasSelected = E.sel.includes(id) && E.sel.length === 1;
     if (e.shiftKey || e.ctrlKey) {
       if (E.sel.includes(id) && !e.ctrlKey) { E.toggleSel(id); return; }
@@ -441,6 +443,27 @@
     extend(e);
     try { E.scroller.setPointerCapture(e.pointerId); } catch (err) { /* window listeners still follow the drag */ }
     drag = { move: extend, up() { L.te.lastSel = L.te.getSel(); } };
+  }
+  /** with the Format Painter on, what the press marks is painted when the mouse is let go: the text selected
+      (id unset) or the object id */
+  function paintOnRelease(id) {
+    if (!L.app.painter.on()) return;
+    const prev = drag;
+    drag = {
+      native: !prev || prev.native,
+      move(ev) { if (prev) prev.move(ev); },
+      up(ev) { if (prev) prev.up(ev); L.app.painter.release(id); },
+    };
+  }
+  /** a press on another object with the Format Painter on: on its text, when the painter carries text
+      formatting, it edits that text and the drag marks what to paint; elsewhere the whole object is painted */
+  function paintPress(e, id) {
+    const sh = E.shape(id), fmt = L.app.painter.value;
+    if (fmt.run && textCapable(sh) && !L.txt.isEmpty(sh.tx) && e.target.closest && e.target.closest('.txi')) {
+      L.te.begin(id, { point: { x: e.clientX, y: e.clientY } });
+      if (L.te.state && !L.te.state.cell) { startTextSelect(e, L.te.state); paintOnRelease(); return; }
+    }
+    paintOnRelease(id);
   }
   function pickId(hit) {
     if (hit.top === hit.inner) return hit.top;
@@ -748,11 +771,11 @@
   E.setTool = function (tool) {
     if (E.readOnly) return;
     if (E.editing()) L.te.end();
+    if (tool) L.ui.brushOn()?.stop();
     E.tool = tool;
-    E.scroller.classList.toggle('drawing', !!tool && tool.kind !== 'painter');
-    E.scroller.classList.toggle('painting', !!tool && tool.kind === 'painter');
+    E.scroller.classList.toggle('drawing', !!tool);
     L.ui.refresh();
-    if (tool && tool.kind !== 'painter') L.app && L.app.status && L.app.status(tool.kind === 'freeform' ? 'Click to add points; double-click to finish' : tool.kind === 'curve' ? 'Click to add points; double-click to finish' : 'Drag to draw; hold Shift to constrain');
+    if (tool) L.app && L.app.status && L.app.status(tool.kind === 'freeform' ? 'Click to add points; double-click to finish' : tool.kind === 'curve' ? 'Click to add points; double-click to finish' : 'Drag to draw; hold Shift to constrain');
   };
   function startTool(e) {
     e.preventDefault();
@@ -924,29 +947,59 @@
   };
 
   /* ---------- format painter ---------- */
+  /* As Impress does (sd FuFormatPaintBrush): from the text being edited the painter carries the text's
+     formatting only (and the paragraph's when the selection is a caret or a whole paragraph); from a selected
+     object, its fill, line and shadow and its text's. It carries the text's look: the run's own formatting over
+     its paragraph's level style. Painted, that replaces a run's own formatting; links, fields and kept XML stay. */
+  const painted = () => L.txt.RUN_KEYS.filter((k) => !['link', 'fld', 'keep'].includes(k));
+  function lookOf(sh, p, own) {
+    const look = L.style.run(L.style.para(sh, p, M.design(L.pres, E.slide())), own);
+    const out = {};
+    for (const k of painted()) if (look[k] !== undefined) out[k] = L.clone(look[k]);
+    return out;
+  }
+  const paintRun = (r, run) => { const o = Object.assign({}, r); for (const k of painted()) { if (run[k] !== undefined) o[k] = L.clone(run[k]); else delete o[k]; } return o; };
+  const wholePara = (tx, s) => s.p0 === s.p1 && s.o0 === 0 && s.o1 >= L.txt.len(tx.ps[s.p0]);
   E.pickFormat = function () {
     const sh = E.primary();
     if (!sh) return null;
+    if (E.editing()) {
+      const t = L.te.target(), s = L.txt.norm(L.te.currentSel()), p = t.tx.ps[s.p0];
+      const fmt = { run: lookOf(t.sh, p, L.te.runPropsAtSel()) };
+      if (L.txt.collapsed(s) || wholePara(t.tx, s)) fmt.para = L.clone(p.pp || {});
+      return fmt;
+    }
     const fmt = { fill: L.clone(sh.fill), line: L.clone(sh.line), shadow: L.clone(sh.shadow) };
-    if (E.editing()) { fmt.run = L.te.runPropsAtSel(); fmt.para = L.te.paraPropsAtSel(); }
-    else if (sh.tx && sh.tx.ps[0]) { const p = sh.tx.ps[0]; fmt.run = L.txt.runProps(p.rs[0] || p.end || {}); fmt.para = L.clone(p.pp || {}); }
+    if (sh.tx && sh.tx.ps[0]) { const p = sh.tx.ps[0]; fmt.run = lookOf(sh, p, L.txt.runProps(p.rs[0] || p.end || {})); fmt.para = L.clone(p.pp || {}); }
     if (sh.type === 'wordart') fmt.wa = { fill: L.clone(sh.wa.fill), line: L.clone(sh.wa.line), shadow: L.clone(sh.wa.shadow), font: sh.wa.font, b: sh.wa.b, i: sh.wa.i };
     return fmt;
   };
-  E.applyPainter = function (id) {
-    const fmt = E.tool && E.tool.fmt;
+  /** paint the text selected in the text being edited, or the word a click landed in; false: nothing to paint */
+  E.paintText = function (fmt) {
+    const t = E.editing() && L.te.target();
+    let s = t && fmt.run && L.te.getSel();
+    if (!s) return false;
+    s = L.txt.norm(s);
+    if (L.txt.collapsed(s) && !(s = L.txt.wordAt(t.tx, { p: s.p0, o: s.o0 }))) return false;
+    L.te.applyRun((r) => paintRun(r, fmt.run), 'Format Painter', s);
+    if (fmt.para && wholePara(t.tx, s)) { const p = t.tx.ps[s.p0]; p.pp = Object.assign({}, p.pp, fmt.para); L.te.rerender(s); }
+    return true;
+  };
+  /** paint a whole object: its fill, line and shadow, and all its text */
+  E.paintShape = function (id, fmt) {
     const sh = E.shape(id);
-    if (!fmt || !sh) return;
+    if (!sh) return false;
+    if (E.editing()) L.te.end();
     E.commit('Format Painter', () => {
-      if (sh.type !== 'text' || (fmt.fill && fmt.fill.t !== 'none')) { if (fmt.fill && sh.type !== 'line' && sh.type !== 'image') sh.fill = L.clone(fmt.fill); }
+      if (fmt.fill && sh.type !== 'line' && sh.type !== 'image' && (sh.type !== 'text' || fmt.fill.t !== 'none')) sh.fill = L.clone(fmt.fill);
       if (fmt.line) sh.line = L.clone(fmt.line);
-      sh.shadow = L.clone(fmt.shadow);
-      if (fmt.run && sh.tx) L.txt.mapRange(sh.tx, L.txt.allRange(sh.tx), (r) => Object.assign({}, r, fmt.run));
+      if ('shadow' in fmt) sh.shadow = L.clone(fmt.shadow);
+      if (fmt.run && sh.tx) L.txt.mapRange(sh.tx, L.txt.allRange(sh.tx), (r) => paintRun(r, fmt.run));
       if (fmt.para && sh.tx) for (const p of sh.tx.ps) p.pp = Object.assign({}, p.pp, fmt.para);
       if (fmt.wa && sh.type === 'wordart') Object.assign(sh.wa, L.clone(fmt.wa));
     });
     E.select([id]);
-    if (!E.tool.sticky) E.setTool(null);
+    return true;
   };
 
   /* ---------- master view ---------- */

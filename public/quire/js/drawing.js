@@ -564,6 +564,7 @@
     if (w) DR.select(w, { p: os.p, o: os.o }); else DR.clearSelection();
   }
   L.bus.on('layout-done', () => setTimeout(() => { if (L.ed.objSel && L.ed.objSel.float) reselect(); else if (handles) DR.clearSelection(); }, 0));
+  L.bus.on('objsel', (os) => { if (!os || !os.float) DR.clearSelection(); });
   /** convert the float's position so that it moves by (dx,dy) points */
   function moveFloat(it, dxPt, dyPt, wrap) {
     const f = it.float;

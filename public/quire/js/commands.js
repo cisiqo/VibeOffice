@@ -342,11 +342,11 @@
   C('focusFont', { label: 'Font', run: () => { const i = L.$('#tb-font'); if (i) i.focus(); } });
   C('focusSize', { label: 'Font Size', run: () => { const i = L.$('#tb-size'); if (i) i.focus(); } });
   C('focusStyle', { label: 'Style', run: () => { const i = L.$('#tb-style'); if (i) i.focus(); } });
-  C('copyFormat', { label: 'Copy Formatting', run: () => A.startPainter(false) });
-  C('pasteFormat', { label: 'Paste Formatting', enabled: canEdit, run: () => { if (A.painter) A.applyPainter(); } });
-  C('painter', { label: 'Format Painter', icon: 'painter', tip: 'Format Painter', enabled: canEdit, checked: () => !!A.painter, run: (arg, ev) => { if (A.painter) { A.painter = null; L.$('#scroller').classList.remove('painting'); return; } A.startPainter(ev && ev.detail === 2); } });
+  C('copyFormat', { label: 'Copy Formatting', run: () => { A.copiedFormat = A.pickFormat(); } });
+  C('pasteFormat', { label: 'Paste Formatting', enabled: () => canEdit() && !!A.copiedFormat, run: () => A.paintFormat(A.copiedFormat) });
+  C('painter', { label: 'Format Painter', icon: 'painter', tip: 'Format Painter', enabled: canEdit, checked: () => A.painter.on(), run: (arg, ev) => A.painter.click(ev) });
   C('fontColorBtn', { label: 'Font Color', icon: 'fontColor', tip: 'Font Color', enabled: canEdit, swatch: () => '#' + A.lastFontColor, run: () => A.applyFontColor(A.lastFontColor) });
-  C('highlightBtn', { label: 'Highlight', icon: 'highlight', tip: 'Highlight', enabled: canEdit, swatch: () => L.R.HIGHLIGHT[A.lastHighlight] || '#ffff00', run: () => A.applyHighlight(A.lastHighlight) });
+  C('highlightBtn', { label: 'Highlight', icon: 'highlight', tip: 'Highlight', enabled: canEdit, checked: () => A.highlighter.on(), swatch: () => L.R.HIGHLIGHT[A.lastHighlight] || '#ffff00', run: () => { if (A.highlighter.on()) A.highlighter.stop(); else A.applyHighlight(A.lastHighlight); } });
   C('borderBtn', { get label() { const b = A.BORDER_ITEMS.find((x) => x[0] === A.lastBorder); return b ? b[2] : 'Outside Border'; }, get icon() { const b = A.BORDER_ITEMS.find((x) => x[0] === A.lastBorder); return b ? b[1] : 'bordersOut'; }, enabled: canEdit, run: () => A.applyBorder(A.lastBorder) });
   /* paragraph */
   C('alignLeft', { label: 'Align Left', icon: 'alignLeft', key: 'Ctrl+L', enabled: canEdit, checked: () => alignIs('left'), run: () => setAlign('left') });
@@ -648,8 +648,7 @@
       os.p.runs.splice(i, 1, ...kids);
       return D.pos(os.p, os.o);
     });
-    E.objSel = null;
-    L.drawing.clearSelection();
+    E.clearObjSel();
   };
   A.insertFileDialog = async function () {
     const files = await L.pickFiles('.docx,.docm,.dotx,.txt,.htm,.html');

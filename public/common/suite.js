@@ -96,10 +96,13 @@
      *  file, the installed PWA's file handlers); the page that calls this takes them */
     onFiles(fn) {
       if (native) {
-        call('host_launch_files').then(async (list) => {
+        // at start, and again when another start of the app hands this one its files (vo-files: Windows)
+        const take = () => call('host_launch_files').then(async (list) => {
           if (!list.length) return;
           fn(await Promise.all(list.map(async (f) => new File([await call('host_read', { handle: f.handle })], f.name))));
         }).catch((e) => console.error('host:', e));
+        take();
+        window.addEventListener('vo-files', take);
       } else if ('launchQueue' in window) {
         window.launchQueue.setConsumer(async (params) => {
           if (params.files && params.files.length) fn(await Promise.all(params.files.map((h) => h.getFile())));
@@ -175,8 +178,23 @@
   });
 
   /* ------------------------------------------------------------ service worker */
-  if (VO.host.kind === 'web' && 'serviceWorker' in navigator && /^https?:$/.test(location.protocol)) {
-    navigator.serviceWorker.register(BASE + 'sw.js').catch((e) => console.warn('service worker:', e.message));
+  /* The published site, https://vibeoffice.work/, is cached for offline use, one version per page (sw.js); the
+     worker is registered there and on 127.0.0.1 (any port: a published copy tried locally; the dev server's own
+     files are unstamped, so the worker caches nothing there), and anywhere else (preview deployments) any earlier
+     registration is removed. While the worker caches a version it reports to every page: 'vo-cache' on window, detail { state:
+     'progress', 'done' or 'failed', update (an earlier version was cached: this is an update), progress (0 to 1),
+     version }. updateViaCache 'none': the browser always asks the server for sw.js, so a new version is found on
+     the next visit. */
+  if (VO.host.kind === 'web' && 'serviceWorker' in navigator) {
+    if (location.origin === 'https://vibeoffice.work' || location.hostname === '127.0.0.1') {
+      navigator.serviceWorker.register(BASE + 'sw.js', { updateViaCache: 'none' }).catch((e) => console.warn('service worker:', e.message));
+      navigator.serviceWorker.addEventListener('message', (e) => {
+        if (e.data && e.data.type === 'vo-cache') window.dispatchEvent(new CustomEvent('vo-cache', { detail: e.data }));
+      });
+      navigator.serviceWorker.startMessages();
+    } else {
+      navigator.serviceWorker.getRegistrations().then((all) => all.forEach((r) => r.unregister())).catch(() => {});
+    }
   }
 
   /* ------------------------------------------------------------ IndexedDB */

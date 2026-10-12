@@ -29,6 +29,14 @@
     if (!opts || !opts.noDom) E.restoreDom(opts && opts.noScroll);
     E.selChanged();
   };
+  /** the one way an object selection ends: its handles go with it (the inline ones here, the floating
+      ones in drawing.js, which follows 'objsel') */
+  E.clearObjSel = function () {
+    hideHandles();
+    if (!E.objSel) return;
+    E.objSel = null;
+    L.bus.emit('objsel', null);
+  };
   function clampPos(pos) { return { p: pos.p, o: L.clamp(pos.o, 0, D.plen(pos.p)) }; }
   E.selectedParas = function () {
     if (!E.sel) return [];
@@ -100,7 +108,7 @@
     if (domIsOurs() && E.sel) return; /* our own restore landed on an equivalent DOM point */
     E.pending = null; D.breakMerge();
     E.sel = m;
-    E.objSel = null;
+    E.clearObjSel();
     E.selChanged();
     E.markCells();
   };
@@ -113,17 +121,24 @@
     if (!m) { snapCaret(); return; }
     if (E.sel && D.eqPos(m.a, E.sel.a) && D.eqPos(m.f, E.sel.f)) return;
     E.pending = null; D.breakMerge();
-    E.sel = m; E.objSel = null; E.selChanged();
+    E.sel = m; E.clearObjSel(); E.selChanged();
   };
   /* where the pointer is while a button is held: a drag that leaves the text is placed by the pointer */
-  let pointer = null, textDrag = false, snapQueued = false;
-  document.addEventListener('pointerdown', (e) => { const t = e.target; textDrag = e.button === 0 && !!(t.closest && t.closest('.p') && LY.root && LY.root.contains(t)); }, true);
+  let pointer = null, textDrag = false, snapQueued = false, pressed = false;
+  document.addEventListener('pointerdown', (e) => { const t = e.target; textDrag = e.button === 0 && !!(t.closest && t.closest('.p') && LY.root && LY.root.contains(t)); pressed = e.button === 0 && isEditableNode(t); }, true);
   document.addEventListener('pointermove', (e) => {
     pointer = e.buttons & 1 ? { x: e.clientX, y: e.clientY } : null;
     /* outside the page (grey area, other panes) the browser stops extending the selection: follow the pointer */
     if (pointer && textDrag && !overText(pointer) && !snapQueued) { snapQueued = true; requestAnimationFrame(() => { snapQueued = false; if (pointer && textDrag) snapCaret(); }); }
   }, true);
-  document.addEventListener('pointerup', () => { pointer = null; textDrag = false; }, true);
+  document.addEventListener('pointerup', () => { pointer = null; textDrag = false; if (pressed) { pressed = false; setTimeout(selDone, 0); } }, true);
+  /** the user let go of the mouse in the document: 'sel' fires all through a drag, 'sel-done' once, when
+      the text selection (or caret) is made; the Format Painter and the highlighter act on it */
+  function selDone() {
+    if (E.objSel) return; /* a press on a shape or picture selected it, not text */
+    E.syncSel();
+    if (E.sel && !E.objSel) L.bus.emit('sel-done', E.sel);
+  }
   /** the selection's moving end landed where there is no text (page gap, margins): put it at the nearest
       paragraph — its end when the point is below it, its start when above — and, when a selection is being
       dragged out, keep where it started */
@@ -686,7 +701,7 @@
     }
     if (k === 'Insert' && !ctrl && !shift) { e.preventDefault(); E.overtype = !E.overtype; L.bus.emit('sel', E.sel); return; }
     if (k === ' ' && ctrl && shift) { e.preventDefault(); E.typeText(' '); return; }
-    if (k === 'Escape') { if (E.objSel) { E.objSel = null; L.bus.emit('objsel', null); } return; }
+    if (k === 'Escape') { E.clearObjSel(); return; }
     /* paragraph navigation */
     if (ctrl && !alt && (k === 'ArrowUp' || k === 'ArrowDown')) {
       e.preventDefault();
@@ -850,8 +865,7 @@
       return;
     }
     /* header/footer double-click is handled in dblclick; a single click on a header in body mode just moves the caret */
-    E.objSel = null;
-    L.bus.emit('objsel', null);
+    E.clearObjSel();
     /* selection bar (left margin) */
     if (LY.view === 'print' || LY.view === 'normal') {
       const pg = t.closest && t.closest('.pg, .flow');

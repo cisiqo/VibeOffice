@@ -35,6 +35,16 @@ test('desktop: the launch file opens in its app, once', () => {
   shot('', [{ js: `await VO.recent.remove('ledger:Budget.csv'); return '1'` }]);
 });
 
+test('desktop: a file another start of the app hands over opens in its app (one instance, Windows)', () => {
+  const { out, r } = shot('', [{ js: `__stubSecondStart('Notes.md', '# Notes\\n\\nHello'); return '1'`, wait: 2500 }, { js: state }],
+    '--pre', path.join(root, 'tests/desktop/host-stub.js'), '--qs', 'nolaunch');
+  assert.equal(r.path, '/quire/', 'Notes.md went to Quire');
+  assert.match(r.newWindow, /\/quire\/\?open=/, 'Quire opened in a window of its own');
+  assert.match(r.title, /^Notes/);
+  assert.match(out, /no errors, no external requests/);
+  shot('', [{ js: `await VO.recent.remove('quire:Notes.md'); return '1'` }]);
+});
+
 test('desktop: File > Exit closes an app window', () => {
   const { r } = shot('quire/', [{ js: `await VO.exit(); await new Promise((r) => setTimeout(r, 300));
     return JSON.stringify({ closed: sessionStorage.closed || '', path: location.pathname });` }], '--pre', path.join(root, 'tests/desktop/host-stub.js'), '--qs', 'nolaunch');

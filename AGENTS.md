@@ -18,7 +18,7 @@ Each app is classic `<script>` files (no ES modules) that attach to one global n
 | [docs/ledger.md](docs/ledger.md) | Ledger: features, formulas and calculation, compatibility results, source layout |
 | [docs/lectern.md](docs/lectern.md) | Lectern: source layout, opening, saving, known limits |
 | [docs/suite.md](docs/suite.md) | Start Center, `common/suite.js` (app launch, Recent Files), PWA manifest, service worker |
-| [docs/desktop.md](docs/desktop.md) | Desktop app (Tauri; Windows with mingw, Linux): host interface (`VO.host`), building, MSI and file types, CI, size, to do |
+| [docs/desktop.md](docs/desktop.md) | Desktop app (Tauri; Windows with mingw, Linux): host interface (`VO.host`), building, installer and file types, CI, size, to do |
 | [docs/testing.md](docs/testing.md) | Test workflow and tools |
 | [docs/LOSSLESS_SAVE.md](docs/LOSSLESS_SAVE.md) | Same-format save: design summary, what was done, working rules, to do |
 | [docs/smartart.md](docs/smartart.md) | IntelliArt (SmartArt): how PowerPoint draws our definitions, what was learned, to do |
@@ -36,7 +36,7 @@ Keep them current: a change to an app's features, formats or source layout updat
 - Follow the [Preservation contracts](docs/suite.md#preservation) for OOXML ownership, identities, edits, history/copy, drafts and loss reporting.
 - Chrome colours come only from the look settings in `public/common/looks.css` (Classic, Paper, Paper 2016; docs/suite.md, Looks), never hard-coded; document content keeps its own colours in every look. A new setting goes into every look (`node --test tests/looks.test.mjs`).
 - A new command also goes into the app's ribbon (`js/ribbon.js`, the Paper 2016 look), where Office 2016 has it (`node --test tests/ribbon.test.mjs`).
-- Shared code lives once, in `public/common/`; never copy it into an app. A change there is checked in all three apps (load each, and screenshot what it touches). What stays app-specific goes through the hooks in docs/suite.md (app config, `ui.hooks`, `L.icons.app`, …), not through app names inside common code.
+- Shared code lives once, in `public/common/`; never copy it into an app. A change there is checked in all three apps (load each, and screenshot what it touches); `common/zip.js` also runs in the service worker (`public/sw.js`), so a change to it is checked with `node --test tests/sw.test.mjs` too. What stays app-specific goes through the hooks in docs/suite.md (app config, `ui.hooks`, `L.icons.app`, …), not through app names inside common code.
 
 ## Office acceptance (lessons from the slide-6 repair)
 
@@ -54,7 +54,7 @@ Keep them current: a change to an app's features, formats or source layout updat
 - Chromium with CDP at 127.0.0.1:9222. `tools/shot.mjs <page> [steps]` drives a page over CDP, takes screenshots and reports console errors and any request that leaves 127.0.0.1. **Never close the browser's other tabs** (Chromium quits with its last tab).
 - `tools/oss-licenses.py`: regenerates `public/oss-licenses.html` (Open source licenses, linked from About) from the license files in `public/`, the desktop app's direct crates and its DLL; run it after changing a font, a word list or a desktop dependency.
 - `tools/templates.mjs`: regenerates the Start Center's template gallery (`public/common/templates.json` and previews) from the apps; run it after changing a template.
-- Tests live in `tests/`, not in `tools/`: `tests/*.test.mjs` (looks, ribbon, search, SmartArt, Scout), `tests/ooxml/`, one folder per app, and `tests/from-issues/N/` for the regression tests of reported issue N.
+- Tests live in `tests/`, not in `tools/`: `tests/*.test.mjs` (looks, ribbon, search, SmartArt, Scout, the service worker, the Format Painter), `tests/ooxml/`, one folder per app, and `tests/from-issues/N/` for the regression tests of reported issue N.
 - `tests/ledger/`: Ledger's Node harnesses (unit tests, `.xlsx` round trip, recalculation, CSV) and Playwright UI checks.
 - `tests/lectern/`: Lectern's real-deck harness (open, render, save, reopen in Chromium), UI checks for passwords and charts, encrypted-save check (see docs/lectern.md).
 

@@ -611,7 +611,7 @@
     if (!sbMode || !G().wb) return;
     const ed = L.editor;
     sbMode.textContent = ed.active ? (ed.mode === 'point' ? 'Point' : ed.mode === 'edit' ? 'Edit' : 'Enter') : G().state.fillTo ? 'Ready' : 'Ready';
-    sbText.textContent = statusText || (wb().calcPr.mode === 'manual' && wb().needsCalc ? 'Calculate' : '') || (G().painting ? 'Click on the cells to apply formatting' : '') || circularText();
+    sbText.textContent = statusText || (wb().calcPr.mode === 'manual' && wb().needsCalc ? 'Calculate' : '') || (A.painter.on() ? 'Click on the cells to apply formatting' : '') || circularText();
     sbInd.END.classList.toggle('off', !G().endMode());
     /* AutoCalculate */
     const fn = A.opts.autoCalcFn || 'SUM';
@@ -979,25 +979,19 @@
     fn();
   };
   /* Format Painter */
-  A.startPaint = function () {
-    if (G().painting) { A.finishPaint(true); return; }
-    const s = G().sel();
-    G().painting = { sh: sh(), range: Object.assign({}, s.ranges[s.active]) };
-    L.$('#gridwrap').classList.add('painting');
-    A.status('Click on the cells to apply formatting');
-    ui.refresh();
-  };
-  A.finishPaint = function (cancel) {
-    const p = G().painting;
-    G().painting = null;
-    L.$('#gridwrap').classList.remove('painting');
-    A.status('');
-    if (!cancel && p) {
+  /* Format Painter: carries the selected range's formats; the grid calls release() when the cells to
+     paint are dragged out */
+  A.painter = ui.brush({
+    el: () => L.$('#gridwrap'),
+    pick: () => { const s = G().sel(); return { sh: sh(), range: Object.assign({}, s.ranges[s.active]) }; },
+    apply: (p) => {
       const s = G().sel();
       try { O.paintFormats(sh(), p.range, p.sh, s.ranges[s.active]); } catch (e) { A.error(e); }
-    }
-    G().paint(); ui.refresh();
-  };
+      G().paint();
+      return true;
+    },
+    status: () => updateStatus(),
+  });
 
   /* AutoSum */
   A.autoSum = function (fn) {

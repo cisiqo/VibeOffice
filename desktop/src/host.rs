@@ -64,14 +64,29 @@ impl Host {
     /// The files on the command line: Open with, a double-click on an associated file ("%1").
     pub fn from_args() -> Self {
         let host = Host::default();
-        for arg in std::env::args_os().skip(1) {
-            let path = PathBuf::from(arg);
+        let cwd = std::env::current_dir().unwrap_or_default();
+        host.add_launch_files(std::env::args_os().skip(1), &cwd);
+        host
+    }
+
+    /// The files among a command line's arguments (this process's, or those another start of the app
+    /// handed over: one instance on Windows), relative ones from `cwd`, for the page that takes them
+    /// (`host_launch_files`). Whether there were any.
+    pub fn add_launch_files<I: IntoIterator<Item = impl Into<PathBuf>>>(
+        &self,
+        args: I,
+        cwd: &Path,
+    ) -> bool {
+        let mut any = false;
+        for arg in args {
+            let path = cwd.join(arg.into());
             if path.is_file() {
-                let handle = host.grant(std::path::absolute(&path).unwrap_or(path));
-                host.launch.lock().unwrap().push(handle);
+                let handle = self.grant(std::path::absolute(&path).unwrap_or(path));
+                self.launch.lock().unwrap().push(handle);
+                any = true;
             }
         }
-        host
+        any
     }
 
     /// Reads settings.json (missing or unreadable: the defaults).
@@ -238,7 +253,7 @@ pub fn open_external(url: &Url) -> Result<(), String> {
 }
 
 #[cfg(windows)]
-fn system_open(url: &str) -> Result<(), String> {
+pub(crate) fn system_open(url: &str) -> Result<(), String> {
     use windows::{
         core::{w, HSTRING, PCWSTR},
         Win32::UI::{Shell::ShellExecuteW, WindowsAndMessaging::SW_SHOWNORMAL},
@@ -265,7 +280,7 @@ fn system_open(url: &str) -> Result<(), String> {
 }
 
 #[cfg(not(windows))]
-fn system_open(url: &str) -> Result<(), String> {
+pub(crate) fn system_open(url: &str) -> Result<(), String> {
     let cmd = if cfg!(target_os = "macos") {
         "open"
     } else {
@@ -392,6 +407,34 @@ fn describe(path: &Path, e: std::io::Error) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn launch_files_are_the_files_among_the_arguments_relative_to_the_starts_folder() {
+        let dir = std::env::temp_dir().join(format!("vo-launch-{}", std::process::id()));
+        std::fs::create_dir_all(dir.join("sub")).unwrap();
+        std::fs::write(dir.join("sub").join("Budget.csv"), "a,b").unwrap();
+        let host = Host::default();
+        let other = std::env::temp_dir();
+        assert!(host.add_launch_files(
+            ["-choose-defaults", "sub/Budget.csv", "missing.docx", "sub"],
+            &dir
+        ));
+        assert!(!host.add_launch_files(["-pin-taskbar"], &other));
+        let absolute = dir.join("sub").join("Budget.csv");
+        assert!(
+            host.add_launch_files([absolute.clone()], &other),
+            "an absolute path stays as it is"
+        );
+        let launched: Vec<PathBuf> = host
+            .launch
+            .lock()
+            .unwrap()
+            .iter()
+            .map(|&h| host.path(h).unwrap())
+            .collect();
+        assert_eq!(launched, [absolute.clone(), absolute]);
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
 
     fn dest(url: &str, name: &str, dir: &Path) -> Option<PathBuf> {
         download_destination(&Url::parse(url).unwrap(), Path::new(name), dir)
