@@ -384,6 +384,8 @@
     root.addEventListener('pointerdown', onPointerDown);
     root.addEventListener('pointermove', onPointerMove);
     root.addEventListener('pointerup', onPointerUp);
+    root.addEventListener('pointercancel', pressLost);
+    window.addEventListener('blur', pressLost);
     root.addEventListener('contextmenu', onContext);
     root.addEventListener('wheel', onWheel, { passive: true });
     document.addEventListener('keydown', onKey, true);
@@ -729,6 +731,7 @@
     if (st.rehearse && !st.ended) recordTime(st.pos);
     document.removeEventListener('keydown', onKey, true);
     window.removeEventListener('resize', layout);
+    window.removeEventListener('blur', pressLost);
     try { if (document.fullscreenElement) await document.exitFullscreen(); } catch (e) { /* ignore */ }
     try { if (st.wake) st.wake.release(); } catch (e) { /* ignore */ }
     const inkData = st.ink;
@@ -824,9 +827,13 @@
     if (link && e.button === 0) { e.preventDefault(); follow(JSON.parse(link.dataset.link)); return; }
     if (e.button === 0) { st._down = true; }
   }
+  /** the press ends without its release (let go in another window, the window left, the pointer cancelled): no
+      click to advance, no ink following the bare pointer */
+  function pressLost() { drawing = null; if (st) st._down = false; }
   function onPointerMove(e) {
     if (!st) return;
     idleCursor();
+    if (e.pointerType === 'mouse' && !(e.buttons & 1)) pressLost();
     if (drawing) {
       if (drawing.erase) { eraseAt(toSlidePt(e)); return; }
       drawing.pts.push(toSlidePt(e));
@@ -917,6 +924,9 @@
 
   function onKey(e) {
     if (!S.active) return;
+    /* the browser's reload keys would reload the page, and the presentation with it: during the show they do nothing
+       (also with the show's menu or a dialog open) */
+    if (e.key === 'F5' || ((e.ctrlKey || e.metaKey) && (e.key === 'r' || e.key === 'R'))) { e.preventDefault(); e.stopPropagation(); return; }
     if (L.ui.dialogOpen()) return;
     if (L.ui.menuOpen()) { if (L.ui.menuKey(e)) { e.preventDefault(); e.stopPropagation(); } return; }
     const k = e.key;

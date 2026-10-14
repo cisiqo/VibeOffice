@@ -9,8 +9,9 @@
 
   /* What the app's editor does around commands, toolbar boxes and dialogs; each app fills these in (app.js).
    * beforeExec: bring the selection model up to date; refocus: give the keyboard back to the document;
-   * commitEdit: finish an edit in progress before a toolbar box takes the focus. */
-  ui.hooks = { beforeExec() {}, refocus() {}, commitEdit() {} };
+   * commitEdit: finish an edit in progress before a toolbar box takes the focus; ownsText(el): el is the document's
+   * own editable text, which refocus gives back with the app's selection (other editable text gets its own back). */
+  ui.hooks = { beforeExec() {}, refocus() {}, commitEdit() {}, ownsText() { return false; } };
   /* Theme colours for the colour menus (Lectern): schemeColors(design) -> [{ ref, hex, tip }], currentDesign() */
   ui.schemeColors = null;
   ui.currentDesign = null;
@@ -107,7 +108,8 @@
     const depth = opts.depth || 0;
     ui.closeMenus(depth);
     const list = (typeof items === 'function' ? items() : items).map(resolveItem).filter((x) => x && !x.hidden);
-    const el = h('div', { class: 'menu' + (opts.cls ? ' ' + opts.cls : ''), role: 'menu', tabindex: '-1' });
+    /* a menu from inside a dialog (a drop-down button there) goes above the dialogs */
+    const el = h('div', { class: 'menu' + (opts.cls ? ' ' + opts.cls : '') + (ui.dialogOpen() ? ' over-dlg' : ''), role: 'menu', tabindex: '-1' });
     const rows = [];
     list.forEach((it) => {
       if (it.sep) { el.appendChild(h('div', { class: 'm-sep' })); return; }
@@ -142,6 +144,7 @@
       ui.closeMenus();
       if (it.run) it.run();
       else if (it.cmd) ui.exec(it.cmd, it.arg);
+      if (!ui.dialogOpen() && keyboardLost()) ui.hooks.refocus();
     }
     el._keys = (e) => {
       const idx = rows.indexOf(active);
@@ -183,7 +186,20 @@
     }, true);
     window.addEventListener('blur', () => ui.closeMenus());
     window.addEventListener('resize', () => ui.closeMenus());
+    /* The keyboard stays with the document when chrome is pressed: a toolbar's, the ribbon's or a pane's background, a
+       grip, the status bar, a tab strip, a menu, the menu bar or a button outside a dialog. The browser would give it
+       to <body> or to what was pressed, and the arrows, Delete and typing would stop working on the document until it
+       is clicked. A control of its own (a box, a list, the document itself, anything in a dialog) still takes it. */
+    document.addEventListener('mousedown', (e) => {
+      const t = e.target;
+      if (!t || !t.closest || t.closest('.dlg')) return;
+      const f = t.closest('input, select, textarea, [contenteditable=""], [contenteditable="true"], a[href], label, [tabindex], button');
+      if (f && !f.matches('button, .menu, .mb-item')) return;
+      e.preventDefault();
+    }, true);
   }
+  /** after chrome that took the keyboard is done with it (a menu command, a dialog), the document gets it back */
+  const keyboardLost = () => !document.activeElement || document.activeElement === document.body || !document.activeElement.isConnected;
   ui.menuOpen = () => openStack.length > 0;
   /* menu keyboard routing; returns true if handled */
   ui.menuKey = (e) => {
@@ -350,12 +366,15 @@
   const dlgStack = [];
   ui.dialogOpen = () => dlgStack.length > 0;
   /**
-   * opts: {title, body, width, buttons:[{label, primary, cancel, onClick(close)→false to keep open}], onClose, help}
+   * opts: {title, body, width, buttons:[{label, primary, cancel, onClick(close, button)→false to keep open}], onClose, help}
    */
   ui.dialog = function (opts) {
     ui.closeMenus();
     hideTip();
     const prevFocus = document.activeElement;
+    /* the selection in text being edited, for text the app doesn't give back itself (Lectern's speaker notes) */
+    const s0 = window.getSelection();
+    const prevRange = prevFocus && prevFocus.isContentEditable && s0.rangeCount && prevFocus.contains(s0.anchorNode) ? s0.getRangeAt(0).cloneRange() : null;
     const overlay = h('div', { class: 'dlg-overlay' });
     const dlg = h('div', { class: 'dlg', role: 'dialog', 'aria-modal': 'true', 'aria-label': opts.title });
     dlg.style.width = Math.min(opts.width || 380, window.innerWidth - 16) + 'px';
@@ -370,7 +389,7 @@
     const btns = (opts.buttons || [{ label: 'OK', primary: true }]).map((b, i) => {
       const el = h('button', { class: 'btn' + (b.primary ? ' primary' : ''), type: 'button', html: ampHTML(b.label) });
       el.addEventListener('click', () => {
-        if (b.onClick) { const r = b.onClick(close); if (r === false) return; }
+        if (b.onClick) { const r = b.onClick(close, el); if (r === false) return; }
         close(i);
       });
       foot.appendChild(el);
@@ -419,8 +438,14 @@
       overlay.remove();
       if (opts.onClose) opts.onClose(i);
       result(i);
-      if (prevFocus && prevFocus.focus && document.contains(prevFocus)) { try { prevFocus.focus({ preventScroll: true }); } catch (e) { /* ignore */ } }
-      else ui.hooks.refocus();
+      /* the keyboard goes back to what had it: a box, a pane's list, the dialog under this one, the grid, text being
+         edited with the selection it had (the page's own moved into the dialog); the document's own text the app gives
+         back itself, with its selection (ui.hooks.ownsText); nothing (<body>, a menu gone) goes to the document */
+      const live = prevFocus && prevFocus.isConnected && prevFocus !== document.body;
+      if (live && !(prevFocus.isContentEditable && ui.hooks.ownsText(prevFocus))) {
+        try { prevFocus.focus({ preventScroll: true }); } catch (e) { /* ignore */ }
+        if (prevRange && prevRange.startContainer.isConnected && prevRange.endContainer.isConnected) { const s = window.getSelection(); s.removeAllRanges(); s.addRange(prevRange); }
+      } else ui.hooks.refocus();
     }
     setTimeout(() => {
       const first = opts.focus ? (typeof opts.focus === 'string' ? L.$(opts.focus, dlg) : opts.focus) : L.$('input:not([type=checkbox]):not([type=radio]),select,textarea', body) || btns.find((b, i) => opts.buttons && opts.buttons[i] && opts.buttons[i].primary) || btns[0];
@@ -735,6 +760,100 @@
     e.preventDefault();
     e.stopPropagation();
     liveBrush.stop();
+  }, true);
+
+  /* ---------- drags ---------- */
+  /* A drag is what a press with the primary button starts and its release ends: moving a shape, a ruler marker or a
+   * cell range, drawing a shape. One at a time, the same in every app (LibreOffice's vcl tracking does the same):
+   *   ui.drag(e, { move(ev, d), up(ev, d), cancel(d), threshold = 4, capture })
+   * on the press event e (a pointerdown, or a mousedown: no pointer capture then, the window listeners follow) returns
+   * the drag d ({ x0, y0, x, y, dx, dy, moved, data: {} for the app }); null for a press of another button.
+   * - move runs only once the pointer is `threshold` px from the press (Windows' drag rectangle), so a click that
+   *   never moved changes nothing: up gets d.moved false.
+   * - up runs on the release of the primary button. The pointer is held by `capture` (by default e.target; false: not
+   *   held, the window listeners follow), so the click and dblclick that follow go to that element; if it is drawn
+   *   again in the middle of the drag, the drag goes on. Don't hold it on a CSS-scaled ancestor of text the browser
+   *   selects: its selection then stops short of the pointer.
+   * - cancel(d, why) runs instead, and nothing may commit (the app puts back what it moved), on: Esc ('esc', which
+   *   goes no further), a second button ('button', its context menu doesn't open), a move that reports the button no
+   *   longer held ('lost': it was let go where the page couldn't see), a lost capture or pointercancel ('lost'), the
+   *   window losing focus or the page hidden ('blur'), Ctrl+Z or Ctrl+Y ('undo': the drag is what gets undone), a new
+   *   drag ('new'), ui.dragCancel() ('api': a tool or view switch). A tool stays armed unless why is 'esc'; Esc also
+   *   puts a brush down (ui.brush). Other keys go nowhere while the button is held, except the modifiers.
+   * - While it moves, the cursor shown at the press stays wherever the pointer goes (`cursor` sets another one;
+   *   false: none is held).
+   * A text selection is the browser's own drag; an app may watch it with { capture: false, cursor: false } (Quire
+   * does, so its release, or how it ended otherwise, is known the same way). */
+  let liveDrag = null, swallow = null, cursorStyle = null;
+  /** the events of the button that cancelled a drag go no further: its press, release, auxclick and context menu */
+  const swallowButton = (button) => { swallow = { button, until: Date.now() + 1500, seen: new Set() }; };
+  const holdCursor = (c) => {
+    if (!cursorStyle) { cursorStyle = document.createElement('style'); document.head.appendChild(cursorStyle); }
+    cursorStyle.textContent = c ? `*, *::before, *::after { cursor: ${c} !important; }` : '';
+  };
+  ui.drag = function (e, o) {
+    if (e.button != null && e.button !== 0) return null;
+    if (liveDrag) liveDrag.end(false, null, 'new');
+    const d = { x0: e.clientX, y0: e.clientY, x: e.clientX, y: e.clientY, dx: 0, dy: 0, moved: false, data: {} };
+    const id = e.pointerId, threshold = o.threshold == null ? 4 : o.threshold;
+    const cap = o.capture === false ? null : o.capture || e.target;
+    let cursor = o.cursor || null;
+    if (!cursor && o.cursor !== false) { try { const c = getComputedStyle(e.target).cursor; if (c && c !== 'auto') cursor = c; } catch (err) { /* no cursor kept */ } }
+    try { if (cap && id != null && cap.setPointerCapture) cap.setPointerCapture(id); } catch (err) { /* window listeners still follow */ }
+    const on = (t, type, fn, capture) => { t.addEventListener(type, fn, capture); return () => t.removeEventListener(type, fn, capture); };
+    const second = (button) => { swallowButton(button); end(false, null, 'button'); };
+    const offs = [
+      on(window, 'pointermove', (ev) => {
+        if (id != null && ev.pointerId !== id) return;
+        if (ev.buttons & 6) { second(ev.buttons & 2 ? 2 : 1); return; }
+        if (!(ev.buttons & 1)) { end(false, null, 'lost'); return; }
+        d.x = ev.clientX; d.y = ev.clientY; d.dx = d.x - d.x0; d.dy = d.y - d.y0;
+        if (!d.moved && Math.hypot(d.dx, d.dy) < threshold) return;
+        if (!d.moved && cursor) holdCursor(cursor);
+        d.moved = true;
+        if (o.move) o.move(ev, d);
+      }, true),
+      on(window, 'pointerup', (ev) => { if ((id == null || ev.pointerId === id) && ev.button === 0) end(true, ev); }, true),
+      on(window, 'keydown', (ev) => {
+        /* the modifiers shape the drag (Shift constrains it, Ctrl copies, Alt doesn't snap) */
+        if (/^(Shift|Control|Alt|Meta|AltGraph|CapsLock)$/.test(ev.key)) return;
+        ev.preventDefault(); ev.stopImmediatePropagation();
+        /* Ctrl+Z (or Y) in the middle of a drag undoes the drag, not what came before it */
+        if ((ev.ctrlKey || ev.metaKey) && /^[zy]$/i.test(ev.key)) { end(false, null, 'undo'); return; }
+        if (ev.key === 'Escape') { end(false, null, 'esc'); if (liveBrush) liveBrush.stop(); }
+        /* any other key waits for the release: an edit in the middle of a drag would come between its start and the
+           step it records */
+      }, true),
+      on(window, 'pointercancel', () => end(false, null, 'lost'), true),
+      on(window, 'blur', () => end(false, null, 'blur')),
+      on(document, 'visibilitychange', () => { if (document.hidden) end(false, null, 'blur'); }),
+    ];
+    if (cap) offs.push(on(cap, 'lostpointercapture', () => { if (cap.isConnected) end(false, null, 'lost'); }));
+    function end(ok, ev, why) {
+      if (liveDrag !== live) return;
+      liveDrag = null;
+      offs.forEach((off) => off());
+      if (cursorStyle) holdCursor(null);
+      try { if (cap && id != null && cap.hasPointerCapture && cap.hasPointerCapture(id)) cap.releasePointerCapture(id); } catch (err) { /* ignore */ }
+      if (ok) { if (o.up) o.up(ev, d); } else if (o.cancel) o.cancel(d, why);
+    }
+    const live = { end, d };
+    liveDrag = live;
+    return d;
+  };
+  ui.dragging = () => !!liveDrag;
+  ui.dragCancel = () => { if (liveDrag) liveDrag.end(false, null, 'api'); };
+  /* a second button cancels the drag; its own events then go no further (the pointer events report it as a move,
+     before the mouse events come): its press, its release, and its auxclick or context menu, whichever ends that
+     click, in whatever order the system sends them (or for 1.5 s at most) */
+  if (typeof window !== 'undefined') for (const type of ['mousedown', 'mouseup', 'auxclick', 'contextmenu']) window.addEventListener(type, (e) => {
+    if (e.button === 0) return;
+    if (liveDrag) { swallowButton(e.button); liveDrag.end(false, null, 'button'); }
+    if (!swallow || e.button !== swallow.button) return;
+    if (Date.now() > swallow.until) { swallow = null; return; }
+    e.preventDefault(); e.stopImmediatePropagation();
+    swallow.seen.add(type);
+    if (swallow.seen.has('mouseup') && swallow.seen.has(swallow.button === 2 ? 'contextmenu' : 'auxclick')) swallow = null;
   }, true);
 
   /* ---------- status bar & misc ---------- */

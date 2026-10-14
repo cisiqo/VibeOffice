@@ -1,4 +1,5 @@
 /* Engine sanity tests: formulas with values known from Excel. */
+require('../../public/common/core.js');
 require('../../public/common/numfmt.js');
 for (const f of ['formula', 'model', 'calc', 'fn-core', 'fn-lookup', 'fn-stat', 'fn-fin', 'fn-eng']) require('../../public/ledger/js/' + f + '.js');
 const L = globalThis.L, M = L.model, C = L.calc;

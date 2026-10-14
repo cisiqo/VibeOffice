@@ -237,6 +237,18 @@
     tx: { body: { bu: { c: 'accent1' } } },
   });
 
+  defDesign('evergreen', 'Evergreen', {
+    colors: scheme('#FBF8F3', '#2B2622', '#E9E2D7', '#1F4038', '#2F6B5B', '#C9803A', '#3F6E8C', '#8C7A66', '#93B7A8', '#5E5A55', '#E8C590', '#A8503E'),
+    fonts: { major: 'Georgia', minor: 'Calibri' },
+    bg: solid('bg1'),
+    /* a copper rule over the title, a hairline over the footer */
+    deco: (W, H) => [deco('rect', W * 0.05, H * 0.07, W * 0.05, H * 0.008, solid('accent2')), deco('rect', W * 0.05, H * 0.905, W * 0.9, H * 0.002, solid('lt2'))],
+    /* the title slide: text on the left, a pine panel on the right */
+    titleDeco: (W, H) => [deco('rect', W * 0.6, 0, W * 0.4, H, solid('tx2')), deco('rect', W * 0.6, 0, W * 0.006, H, solid('accent2'))],
+    ph: { title: [0.05, 0.09, 0.9, 0.13], body: [0.05, 0.26, 0.9, 0.61], ctrTitle: [0.06, 0.25, 0.48, 0.3], subTitle: [0.06, 0.57, 0.48, 0.16], dt: [0.05, 0.92, 0.2333, 0.06], ftr: [0.3417, 0.92, 0.3167, 0.06], sldNum: [0.7167, 0.92, 0.2333, 0.06] },
+    tx: { title: { algn: 'l', rPr: { sz: 36 } }, body: { bu: { c: 'accent2' } }, footer: { color: 'folHlink' }, ctrTitleAlgn: 'l', subTitleAlgn: 'l' },
+  });
+
   M.DESIGNS = DESIGNS;
 
   /** Build a concrete design object (data only) for a slide size. */
@@ -488,9 +500,11 @@
     { key: 'custom', name: 'Custom', w: 720, h: 540 },
   ];
 
+  /** the size of a new presentation, unless the user chose another (Page Setup): Widescreen, as in PowerPoint */
+  M.DEFAULT_SIZE = { w: 960, h: 540 };
   M.newPresentation = function (opts) {
     opts = opts || {};
-    const W = opts.w || 720, H = opts.h || 540;
+    const W = opts.w || M.DEFAULT_SIZE.w, H = opts.h || M.DEFAULT_SIZE.h;
     const design = M.buildDesign(opts.design || 'default', W, H);
     const pres = {
       W, H, firstNum: 1, title: opts.title || '',
@@ -719,6 +733,9 @@
   H.restore = (snap) => { Object.assign(L.pres, JSON.parse(snap)); };
   /** Record state before a mutation. coalesceKey merges rapid repeats (typing). */
   H.push = (label, coalesceKey) => {
+    /* an edit made while a drag is live (one the keys held back didn't stop) ends that drag first: the drag put back
+       what it moved, so this step's snapshot and the drag's own never interleave */
+    if (L.ui && L.ui.dragging && L.ui.dragging()) L.ui.dragCancel();
     const now = Date.now();
     if (coalesceKey && H._key === coalesceKey && now - H._t < 1200) { H._t = now; H.dirty = true; return; }
     H._key = coalesceKey || null; H._t = now;

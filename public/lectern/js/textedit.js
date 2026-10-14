@@ -353,7 +353,7 @@
     if (opts.sel) TE.setSel(opts.sel);
     else if (opts.point) {
       const rg = caretFromPoint(opts.point.x, opts.point.y);
-      if (rg && root.contains(rg.startContainer)) { const s = window.getSelection(); s.removeAllRanges(); s.addRange(rg); if (opts.word && s.modify) { s.modify('move', 'backward', 'word'); s.modify('extend', 'forward', 'word'); } }
+      if (rg && root.contains(rg.startContainer)) { const s = window.getSelection(); s.removeAllRanges(); s.addRange(rg); if (opts.word) wordAround(s); }
       else TE.setSel(endSel(tx));
     } else if (opts.selectAll) TE.setSel(T.allRange(tx));
     else TE.setSel(endSel(tx));
@@ -361,6 +361,15 @@
     E.drawOverlay();
     L.bus.emit('edit-start');
     L.ui.refresh();
+  };
+  function wordAround(s) { if (s.modify) { s.modify('move', 'backward', 'word'); s.modify('extend', 'forward', 'word'); } }
+  /** select the word at a screen point of the text being edited (a double-click whose first click started the edit) */
+  TE.selectWordAt = function (x, y) {
+    const rg = TE.state && caretFromPoint(x, y);
+    if (!rg || !TE.contains(rg.startContainer.nodeType === 1 ? rg.startContainer : rg.startContainer.parentNode)) return;
+    const s = window.getSelection();
+    s.removeAllRanges(); s.addRange(rg); wordAround(s);
+    TE.lastSel = TE.getSel();
   };
   const endSel = (tx) => { const p = tx.ps.length - 1; const o = T.len(tx.ps[p]); return { p0: p, o0: o, p1: p, o1: o }; };
   function caretFromPoint(x, y) {
@@ -737,6 +746,16 @@
     const t = TE.target();
     if (!t) return false;
     const k = e.key;
+    /* over a range of table cells, Delete and Backspace empty the cells; typing or moving goes on in the cell where the
+       drag started, and the range ends with its highlight (as Impress) */
+    if (E.cellSel && !e.ctrlKey && !e.metaKey && !e.altKey) {
+      if (k === 'Delete' || k === 'Backspace') { e.preventDefault(); clearCells(t); return true; }
+      if (k.length === 1 || /^(Enter|Tab|Arrow\w+|Home|End|PageUp|PageDown)$/.test(k)) {
+        E.cellSel = null; E.drawOverlay();
+        const s = window.getSelection();
+        if (!s.rangeCount || !TE.state.root.contains(s.anchorNode)) TE.setSel(endSel(t.tx));
+      }
+    }
     if (k === 'Escape') { e.preventDefault(); const id = t.sh.id; TE.end(); E.select([id]); E.refocus(); return true; }
     if (k === 'F2') { e.preventDefault(); const id = t.sh.id; TE.end(); E.select([id]); E.refocus(); return true; }
     if (k === 'Enter' && !e.ctrlKey && !e.altKey && !e.metaKey) {
@@ -759,6 +778,18 @@
     }
     return false;
   };
+  /** empty the cells of the range (one undo step); the caret stays in the cell the drag started from */
+  function clearCells(t) {
+    const cells = E.cellSel, id = t.sh.id, cell = TE.state.cell;
+    TE.detach();
+    E.cellSel = cells;
+    L.hist.push('Clear');
+    F.forEachTx(t.sh, (tx) => { tx.ps = [Object.assign(L.clone(tx.ps[0]), { rs: [] })]; });
+    E.cellSel = null;
+    E.render({ keepEdit: false });
+    TE.begin(id, { cell, sel: { p0: 0, o0: 0, p1: 0, o1: 0 } });
+    E.touched();
+  }
   TE.moveCell = function (dir) {
     const st = TE.state;
     const sh = TE.target().sh;
@@ -810,7 +841,9 @@
     const shapes = TE.active() ? [TE.target().sh] : F.textShapes();
     if (!shapes.length) return;
     const editSnap = TE.active() ? TE.snapshot() : null;
+    const cells = E.cellSel;   /* a range of table cells: detaching ends it, but it is what gets formatted */
     if (editSnap) TE.detach();
+    E.cellSel = cells;
     L.hist.push(label || 'Format');
     for (const sh of shapes) {
       if (sh.type === 'wordart') { if (waFn) waFn(sh.wa); continue; }
@@ -819,6 +852,7 @@
     if (E.view === 'master') E.syncMaster();
     E.render({ keepEdit: false });
     if (editSnap) TE.resume(editSnap);
+    if (cells && editSnap) { E.cellSel = cells; E.drawOverlay(); }   /* the range stays selected */
     E.touched();
   };
   F.para = function (fn, label) {
@@ -826,12 +860,15 @@
     const shapes = TE.active() ? [TE.target().sh] : F.textShapes().filter((s) => s.type !== 'wordart');
     if (!shapes.length) return;
     const editSnap = TE.active() ? TE.snapshot() : null;
+    const cells = E.cellSel;   /* a range of table cells: detaching ends it, but it is what gets formatted */
     if (editSnap) TE.detach();
+    E.cellSel = cells;
     L.hist.push(label || 'Format Paragraph');
     for (const sh of shapes) forEachTx(sh, (tx) => tx.ps.forEach((p, i) => fn(p, i, { sh, tx })));
     if (E.view === 'master') E.syncMaster();
     E.render({ keepEdit: false });
     if (editSnap) TE.resume(editSnap);
+    if (cells && editSnap) { E.cellSel = cells; E.drawOverlay(); }   /* the range stays selected */
     E.touched();
   };
   /** Effective run & paragraph state for toolbar display */

@@ -393,6 +393,17 @@
   /**
    * Move (cut + paste, or drag) src on sheet `sh` to `to` (on `toSheet`, default same). copy: Ctrl-drag copies instead.
    */
+  /** whether cells of range `to` outside `except` hold a value or a formula (formatting alone doesn't count) */
+  CL.holdsData = function (sh, to, except) {
+    for (let r = to.r1; r <= Math.min(to.r2, sh.maxR); r++) {
+      const row = sh.rows[r];
+      if (row) for (let c = to.c1; c <= Math.min(to.c2, row.cells.length - 1); c++) {
+        const cl = row.cells[c];
+        if (cl && (cl.v != null || cl.f != null) && !(except && M.rangeContains(except, r, c))) return true;
+      }
+    }
+    return false;
+  };
   CL.moveRange = function (sh, src, to, copy, toSheet) {
     toSheet = toSheet || sh;
     const wb = sh.wb;
@@ -408,7 +419,6 @@
       return;
     }
     if (O.cutsArray(sh, [src]) || O.cutsArray(toSheet, [to])) { L.ui.msg('You cannot change part of an array.', { icon: 'warn' }); return; }
-    /* overwriting non-empty cells asks first (drag only) */
     O.tx(wb, 'Move', () => {
       const snap = snapshot(sh, src);
       const sameSheet = toSheet === sh;

@@ -4,8 +4,10 @@
  * day he is shown, by himself or from the menu, he says good morning and who he is, and offers a few things to
  * do; after that Help ▸ Show the Assistant brings him in with a wave. A click on him offers the things to do, and a right-click gives Animate!, Search commands, the app's Help and Hide
  * (he waves goodbye). Where he sits is kept for the whole suite. While the user works he acts out what they do
- * (saving, printing, searching, …), from the suite's own signals; the apps don't call him. While the window is
- * in the background he stands still and nothing is drawn, to save energy; he carries on when it comes back.
+ * (saving, printing, searching, …), from the suite's own signals; the apps don't call him. His idling follows
+ * them: a small thing now and then while they work, more once they are quiet, a nap after five minutes, from
+ * which they wake him. While the window is in the background he stands still and nothing is drawn, to save
+ * energy; he carries on when it comes back.
  *
  *   L.assistant.show(asked) / hide() / shown() / scout()
  *   command showAssistant: Show the Assistant / Hide the Assistant (each app's Help menu)
@@ -128,8 +130,9 @@
      printing; the work that keeps them waiting (vo-busy, the busy box) keeps him at it. Saving is the
      exception: he saves once the file is written (vo-saved, from L.saveFile), not when the user asks. The pairings are
      Office's (msoAnimationSaving, msoAnimationPrinting, …). Manners: only while he is on screen with the window
-     in front; never while he is asking something or coming and going; what he was doing gives way, nothing
-     queues; the same act at most once in COOL_MS; nothing with reduced motion. */
+     in front; never while he is asking something or coming and going; an idle gives way at once, and a nap ends
+     with his waking up; an act under way plays out, and one act waits for it (a newer one takes its place); the
+     act he is at already, nothing new; nothing with reduced motion. */
   const ON_COMMAND = {
     Print: 'print printQuick printPreview',
     Fetch: 'open slidesFromFiles insertFile importText',
@@ -145,10 +148,8 @@
   const ACT_OF = {};
   for (const [act, ids] of Object.entries(ON_COMMAND)) for (const id of ids.split(' ')) ACT_OF[id] = act;
   const SAVES = /^(save|saveAs|saveWeb|exportPDF|exportCSV)$/;   // a file written after these is a save (after Print, a PDF is not)
-  const COOL_MS = 20000;
   const WORK_MS = 400;   // the busy box shorter than this is no work to act out
   const ENTRANCES = /^(Show|Greeting|Hide|GoodBye)$/;
-  const lastAct = {};
   let work = null, workDone = null, lastCmd = '';   // work: a promise that settles when the busy box goes
 
   const free = () => !!scout && !scout.hidden && !scout.frozen && !balloonOpen() && !matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -157,10 +158,7 @@
     if (!free()) return;
     const cur = scout.current;
     if (cur && (ENTRANCES.test(cur.name) || cur.name === act)) return;
-    const now = Date.now();
-    if (now - (lastAct[act] || -Infinity) < COOL_MS) return;
-    lastAct[act] = now;
-    scout.play(act, { interrupt: true }).then((done) => { if (done && work) scout.play('Processing', { until: work }); });
+    scout.play(act, { next: true }).then((done) => { if (done && work) scout.play('Processing', { until: work }); });
   }
 
   addEventListener('vo-command', (e) => { lastCmd = e.detail.id; if (ACT_OF[lastCmd]) react(ACT_OF[lastCmd]); });
@@ -169,10 +167,14 @@
   addEventListener('vo-busy', (e) => {
     if (!e.detail.on) { if (workDone) workDone(); work = workDone = null; return; }
     const w = work = new Promise((r) => { workDone = r; });
-    setTimeout(() => { if (work === w && free() && !scout.current) scout.play('Processing', { interrupt: true, until: w }); }, WORK_MS);
+    setTimeout(() => { if (work === w && free() && (!scout.current || scout.current.idle)) scout.play('Processing', { next: true, until: w }); }, WORK_MS);
   });
   addEventListener('vo-message', (e) => { if (e.detail.icon === 'warn' || e.detail.icon === 'error') react('Alert'); });
   addEventListener('beforeprint', () => react('Print'));
+  /* the user at work: what he idles at follows them (keys, presses, the wheel, the window coming back; the mouse
+     merely moving is no work) */
+  const stir = () => { if (scout) scout.userActive(); };
+  for (const type of ['keydown', 'pointerdown', 'wheel']) addEventListener(type, stir, { capture: true, passive: true });
 
   /* the window in the background: he stands still, nothing drawn until it comes back (a hidden page draws
      nothing anyway) */
@@ -187,7 +189,7 @@
   addEventListener('focus', () => {
     clearTimeout(awayTimer);
     away = false;
-    if (scout) scout.freeze(false);
+    if (scout) scout.freeze(false).userActive();
   });
   addEventListener('resize', () => { if (scout) place(); });
   /* shown or hidden in another window */

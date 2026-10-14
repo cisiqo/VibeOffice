@@ -6,6 +6,7 @@
 # - stamps the version into common/suite.js (VO.VERSION = 'dev';) and sw.js (const VERSION = 'dev';);
 # - packs updater/web-<version>.zip, the whole site the service worker downloads and caches (public/sw.js): every
 #   file but sw.js, updater/ and hidden files, deflated, without folder entries or extra attributes.
+# Warns when the whole UI suite has not passed on this public/ (tools/ui-tested.sh, docs/testing.md).
 # Needs zip (Info-ZIP). ../cf-vibeoffice/sync-cf-pages.sh runs it on the copy it deploys; never run it on public/
 # itself.
 set -eu
@@ -20,6 +21,8 @@ esac
 [ -f "$DIR/common/suite.js" ] && [ -f "$DIR/sw.js" ] || { echo "Not a copy of public/: $DIR" >&2; exit 1; }
 [ "$(cd "$DIR" && pwd -P)" != "$(cd "$(dirname "$0")/../public" && pwd -P)" ] || { echo "Refusing to stamp public/ itself" >&2; exit 1; }
 command -v zip > /dev/null || { echo "Needs zip (Info-ZIP)" >&2; exit 1; }
+# a warning, not a stop: has the whole UI suite run on this public/ (tools/ui-full.mjs)?
+"$(dirname "$0")/ui-tested.sh" || :
 
 # replace the one line that says 'dev'
 stamp() {

@@ -336,15 +336,10 @@
       } }, { label: 'Cancel' }],
     });
   };
-  /** a small tile showing a fill pattern */
+  /** a small tile showing a fill pattern (solid: the pattern colour) */
   function patternURL(p, fg, bg) {
-    const px = { darkGray: ['1011', '0101'], mediumGray: ['10', '01'], lightGray: ['1000', '0010'], gray125: ['10000000', '00001000'], gray0625: ['1000000000000000', '0000000010000000'], darkHorizontal: ['1111', '1111', '0000', '0000'], darkVertical: ['1100', '1100', '1100', '1100'], darkDown: ['1100', '0110', '0011', '1001'], darkUp: ['0011', '0110', '1100', '1001'], darkGrid: ['1111', '1111', '1100', '1100'], darkTrellis: ['1111', '0110', '1111', '1001'], lightHorizontal: ['1111', '0000', '0000', '0000'], lightVertical: ['1000', '1000', '1000', '1000'], lightDown: ['1000', '0100', '0010', '0001'], lightUp: ['0001', '0010', '0100', '1000'], lightGrid: ['1111', '1000', '1000', '1000'], lightTrellis: ['1010', '0101', '1010', '0001'] }[p];
-    if (!px) return `data:image/svg+xml,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="4" height="4"><rect width="4" height="4" fill="${fg}"/></svg>`)}`;
-    let rects = '';
-    const rowsP = px.length === 2 && px[0].length > 4 ? px.concat(px.map(() => '0'.repeat(px[0].length)).slice(0, px[0].length - 2)) : px;
-    const n = Math.max(rowsP.length, rowsP[0].length);
-    for (let y = 0; y < n; y++) { const row = rowsP[y % rowsP.length]; for (let x = 0; x < n; x++) if (row[x % row.length] === '1') rects += `<rect x="${x}" y="${y}" width="1" height="1" fill="${fg}"/>`; }
-    return `data:image/svg+xml,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="${n}" height="${n}" shape-rendering="crispEdges"><rect width="${n}" height="${n}" fill="${bg}"/>${rects}</svg>`)}`;
+    if (!L.render.CELL_PATTERNS[p]) return `data:image/svg+xml,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="4" height="4"><rect width="4" height="4" fill="${fg}"/></svg>`)}`;
+    return L.render.patternURL(p, fg, bg);
   }
   D.patternURL = patternURL;
 
@@ -663,8 +658,9 @@
     let type = b.type === 'xlsm' || b.type === 'xltx' || b.type === 'xltm' || b.type === 'csv' || b.type === 'txt' ? b.type : 'xlsx';
     const name = h('input', { type: 'text', value: base, style: 'width:100%' });
     const pw = { open: b.password || '', backup: false };
-    const tools = ui.button('Too&ls ▾', () => {
-      const r = tools.getBoundingClientRect();
+    /* the Tools button's menu, under the button */
+    const tools = (button) => {
+      const r = button.getBoundingClientRect();
       ui.openMenu([{ label: '&General Options...', run: () => {
         const p1 = h('input', { type: 'password', value: pw.open, autocomplete: 'new-password' });
         ui.dialog({ title: 'Save Options', width: 320, body: h('div', { class: 'col' }, ui.group('File sharing', ui.field('Password to &open:', p1)), h('div', { class: 'hint', text: 'Workbooks saved with a password are encrypted (AES-256) and open in Excel 2010 and later.' })), buttons: [{ label: 'OK', primary: true, onClick: () => {
@@ -673,9 +669,9 @@
           ui.dialog({ title: 'Confirm Password', width: 300, body: h('div', { class: 'col' }, ui.field('Reenter password to proceed.', p2), h('div', { class: 'hint', text: 'Caution: If you lose or forget the password, it cannot be recovered.' })), buttons: [{ label: 'OK', primary: true, onClick: () => { if (p2.value !== p1.value) { ui.msg("Confirmation password is not identical.", { icon: 'warn' }); return false; } pw.open = p1.value; } }, { label: 'Cancel' }] });
         } }, { label: 'Cancel' }] });
       } }], { left: r.left, bottom: r.bottom });
-    });
+    };
     return ui.dialog({ title: 'Save As', width: 460, body: h('div', { class: 'col' }, ui.field('File &name:', name), ui.field('Save as &type:', ui.select(types, type, (v) => { type = v; })), h('div', { class: 'hint', text: 'The file is saved to your browser\'s downloads.' })),
-      buttons: [{ label: 'Tools', onClick: () => { tools.click(); return false; } }, { label: '&Save', primary: true, onClick: () => {
+      buttons: [{ label: 'Tools', onClick: (close, button) => { tools(button); return false; } }, { label: '&Save', primary: true, onClick: () => {
         const ext = { xmlss: 'xml', html: 'htm' }[type] || type;
         const n = (name.value.trim() || base).replace(/\.(xlsx|xlsm|xltx|xltm|xml|csv|txt|htm|html|pdf)$/i, '') + '.' + ext;
         b.password = pw.open || undefined;

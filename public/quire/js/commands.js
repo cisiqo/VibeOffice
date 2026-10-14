@@ -715,11 +715,13 @@
         L.$('#center').insertBefore(bar, L.$('#viewbar'));
         L.$('#center').insertBefore(pane2, bar);
         bar.addEventListener('pointerdown', (e) => {
-          e.preventDefault(); bar.setPointerCapture(e.pointerId);
-          const y0 = e.clientY, h0 = pane2.offsetHeight;
-          const mv = (ev) => { pane2.style.height = L.clamp(h0 - (ev.clientY - y0), 60, window.innerHeight * 0.7) + 'px'; };
-          const up = () => { bar.removeEventListener('pointermove', mv); bar.removeEventListener('pointerup', up); };
-          bar.addEventListener('pointermove', mv); bar.addEventListener('pointerup', up);
+          if (e.button !== 0) return;
+          e.preventDefault();
+          const h0 = pane2.offsetHeight, style0 = pane2.style.height;
+          L.ui.drag(e, {
+            move: (ev, d) => { pane2.style.height = L.clamp(h0 - d.dy, 60, window.innerHeight * 0.7) + 'px'; },
+            cancel: () => { pane2.style.height = style0; },
+          });
         });
         pane2.addEventListener('click', (e) => {
           const pg = e.target.closest('.pg');

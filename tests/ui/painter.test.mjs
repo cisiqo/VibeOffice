@@ -1,52 +1,12 @@
-// The Format Painter in Quire, Ledger and Lectern with real mouse input (CDP Input events, paced like a hand),
-// in the Chromium at CDP 127.0.0.1:9222: it paints what the user marks, once, when the mouse is let go (never
-// while a selection is still being dragged out); a click on its button arms it for one use, a double-click
-// keeps it on until Esc; starting it keeps the selection or the text being edited (common/ui.js, ui.brush).
+// The Format Painter in Quire, Ledger and Lectern with real mouse input (tests/lib/input.mjs): it paints what the
+// user marks, once, when the mouse is let go (never while a selection is still being dragged out); a click on its
+// button arms it for one use, a double-click keeps it on until Esc; starting it keeps the selection or the text being
+// edited (common/ui.js, ui.brush; docs/suite.md, Brushes).
 //
-//   node --test tests/painter.test.mjs
+//   node --test --test-concurrency=1 tests/ui/*.test.mjs
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { ensureServer, openPage } from '../tools/ooxml/cdp.mjs';
-
-const pause = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-
-/** a tab on app with mouse and keyboard helpers */
-async function open(app) {
-  const page = await openPage(app, { persistence: false });
-  const { send, evaluate } = page;
-  await send('Emulation.setDeviceMetricsOverride', { width: 1280, height: 800, deviceScaleFactor: 1, mobile: false });
-  const mouse = (type, { x, y }, clickCount = 1) => send('Input.dispatchMouseEvent', { type, x, y, button: 'left', buttons: type === 'mouseReleased' ? 0 : 1, clickCount });
-  const io = {
-    ...page,
-    async click(p) { await mouse('mousePressed', p); await pause(50); await mouse('mouseReleased', p); await pause(300); },
-    async drag(from, to, steps = 8) {
-      await mouse('mousePressed', from); await pause(60);
-      for (let i = 1; i <= steps; i++) { await mouse('mouseMoved', { x: from.x + (to.x - from.x) * i / steps, y: from.y + (to.y - from.y) * i / steps }); await pause(40); }
-      await mouse('mouseReleased', to); await pause(300);
-    },
-    /** the Format Painter button of the toolbar or ribbon on screen */
-    button: (cmd) => evaluate(`(() => { const b = [...document.querySelectorAll('[data-cmd="${cmd}"]')].find((b) => b.getBoundingClientRect().width);
-      const r = b.getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; })()`),
-    async doubleClick(p) {
-      await mouse('mousePressed', p, 1); await mouse('mouseReleased', p, 1); await pause(80);
-      await mouse('mousePressed', p, 2); await mouse('mouseReleased', p, 2); await pause(300);
-    },
-    async key(key, code, vk, modifiers = 0) {
-      await send('Input.dispatchKeyEvent', { type: 'keyDown', key, code, windowsVirtualKeyCode: vk, modifiers });
-      await send('Input.dispatchKeyEvent', { type: 'keyUp', key, code, windowsVirtualKeyCode: vk, modifiers });
-      await pause(200);
-    },
-    esc: () => io.key('Escape', 'Escape', 27),
-    /** the brush cursor is showing */
-    painting: () => evaluate(`!!document.querySelector('.painting')`),
-    clean() { assert.deepEqual(page.errors, [], 'browser errors'); assert.deepEqual(page.requests, [], 'external requests'); },
-  };
-  return io;
-}
-
-let stop;
-test.before(async () => { stop = await ensureServer(); });
-test.after(() => stop());
+import { open } from '../lib/input.mjs';
 
 test('Quire: paints the dragged text, a clicked word; locks on a double-click; keeps links', async () => {
   const q = await open('quire');
@@ -79,7 +39,7 @@ test('Quire: paints the dragged text, a clicked word; locks on a double-click; k
 
     await q.esc();
     await load();
-    await q.doubleClick(await q.button('painter'));
+    await q.dblclick(await q.button('painter'));
     assert.equal(await q.painting(), true, 'a double-click arms the painter');
     await q.drag(await at(1, 20), await at(1, 26));
     assert.equal(await q.painting(), true, 'and keeps it on');
@@ -92,11 +52,11 @@ test('Quire: paints the dragged text, a clicked word; locks on a double-click; k
 
     /* Copy Formatting / Paste Formatting (Ctrl+Shift+C, Ctrl+Shift+V): no brush, pastes as often as asked */
     await load();
-    await q.key('C', 'KeyC', 67, 10);
+    await q.key('C', { ctrl: true, shift: true });
     assert.equal(await q.painting(), false, 'Copy Formatting arms no brush');
     for (const [b, o0, o1] of [[1, 0, 6], [2, 0, 5]]) {
       await q.evaluate(`(() => { const p = L.D.doc.main.blocks[${b}]; L.ed.setSel(L.D.pos(p, ${o0}), L.D.pos(p, ${o1})); })()`);
-      await q.key('V', 'KeyV', 86, 10);
+      await q.key('V', { ctrl: true, shift: true });
     }
     assert.deepEqual((await runs(1))[0], ['Second', true], 'first paste');
     assert.deepEqual((await runs(2))[0], ['Third', true], 'second paste');
@@ -118,7 +78,7 @@ test('Ledger: paints the dragged cells; locks on a double-click; Esc ends it', a
     assert.equal(await g.painting(), false, 'one use, then off');
 
     await g.evaluate(`L.grid.select(0, 0)`);
-    await g.doubleClick(await g.button('formatPainter'));
+    await g.dblclick(await g.button('formatPainter'));
     assert.equal(await g.painting(), true, 'a double-click arms the painter');
     await g.click(await cell(0, 4));
     assert.equal(await g.painting(), true, 'and keeps it on');
@@ -166,7 +126,7 @@ test('Lectern: keeps text editing; paints dragged text, a clicked word, another 
       'a click on a word in another box paints the word, replacing its italic');
     assert.equal((await state()).editing, 'boxB', 'that box is edited');
 
-    await s.doubleClick(painter);
+    await s.dblclick(painter);
     assert.deepEqual(await state(), { editing: 'boxB', painter: true }, 'a double-click arms the painter');
     await s.drag(await at('boxB', 0), await at('boxB', 7));
     assert.equal(await s.painting(), true, 'and keeps it on');
@@ -184,10 +144,43 @@ test('Lectern: keeps text editing; paints dragged text, a clicked word, another 
     assert.equal(await s.painting(), false, 'one use');
 
     await s.click(await centre('red'));
-    await s.doubleClick(painter);
+    await s.dblclick(painter);
     const empty = await s.evaluate(`(() => { const r = L.ed.host.getBoundingClientRect(); return { x: r.left + r.width - 20, y: r.top + 20 }; })()`);
     await s.click(empty);
     assert.equal(await s.painting(), false, 'a click beside the objects puts even a kept-on painter down');
+    s.clean();
+  } finally { await s.close(); }
+});
+
+test('Esc in the middle of a painting drag cancels it and puts the painter down (Ledger, Lectern)', async () => {
+  const g = await open('ledger');
+  try {
+    const cell = (r, c) => g.evaluate(`(() => { const w = document.querySelector('#gridwrap').getBoundingClientRect(), b = L.grid.cellRect(${r}, ${c}); return { x: w.left + b.x + b.w / 2, y: w.top + b.y + b.h / 2 }; })()`);
+    const painted = () => g.evaluate(`(() => { const sh = L.grid.sheet(), s = sh.get(0, 0).s; let n = 0; for (let r = 1; r < 12; r++) for (let c = 0; c < 6; c++) { const cl = sh.get(r, c); if (cl && cl.s === s) n++; } return n; })()`);
+    await g.evaluate(`L.grid.select(0, 0); L.ui.exec('bold')`);
+    await g.click(await g.button('formatPainter'));
+    const a = await cell(3, 3), b = await cell(6, 5);
+    await g.press(a); await g.glide(a, b, 5); await g.esc(); await g.release(b);
+    assert.equal(await g.painting(), false, 'Ledger: the painter is down');
+    await g.click(await cell(9, 1));
+    assert.equal(await painted(), 0, 'Ledger: nothing painted, not even by the next click');
+    g.clean();
+  } finally { await g.close(); }
+  const s = await open('lectern');
+  try {
+    await s.evaluate(`(async () => {
+      const E = L.ed, M = L.model, slide = L.pres.slides[E.idx];
+      const rect = (id, x, v) => { const r = M.newShape(L.pres, slide, 'rect', x, 300, 150, 80); r.id = id; r.fill = { t: 'solid', c: v, a: 1 }; return r; };
+      slide.shapes = [rect('red', 60, '#FF0000'), rect('blue', 300, '#0000FF')]; E.sel = []; E.render();
+      await new Promise((r) => setTimeout(r, 300));
+    })()`);
+    const centre = (id) => s.evaluate(`(() => { const r = L.ed.elOf('${id}').getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; })()`);
+    await s.click(await centre('red'));
+    await s.click(await s.button('painter'));
+    const c = await centre('blue'), to = { x: c.x + 30, y: c.y + 20 };
+    await s.press(c); await s.glide(c, to, 5); await s.esc(); await s.release(to);
+    assert.equal(await s.painting(), false, 'Lectern: the painter is down');
+    assert.equal(await s.evaluate(`L.ed.shape('blue').fill.c`), '#0000FF', 'Lectern: the shape is not painted');
     s.clean();
   } finally { await s.close(); }
 });

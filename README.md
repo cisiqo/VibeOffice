@@ -20,7 +20,7 @@
       <b><a href="https://vibeoffice.work/ledger/">Ledger</a></b><br>Spreadsheet
     </td>
     <td align="center" width="33%">
-      <a href="https://vibeoffice.work/lectern/"><img src="docs/images/lectern.png" alt="Lectern, the presentation editor, with a cycle diagram, LettersArt and a chart on a slide"></a><br>
+      <a href="https://vibeoffice.work/lectern/"><img src="docs/images/lectern.png" alt="Lectern, the presentation editor, with the sample deck: a drawn title slide, then a chart, a table, a timeline and a funnel diagram"></a><br>
       <b><a href="https://vibeoffice.work/lectern/">Lectern</a></b><br>Presentations
     </td>
   </tr>
@@ -64,8 +64,18 @@ Found a file that doesn't open or save the way it should? Please [open an issue]
 
 VibeOffice is plain HTML and JavaScript with no build step. Read [AGENTS.md](AGENTS.md) for the design rules and [docs/testing.md](docs/testing.md) for running it locally and testing.
 
-## License
+## Legal
 
-Apache License 2.0, see [LICENSE](LICENSE). Two folders carry their own licences, listed in each folder's `LICENSES.txt`: the proofing word lists and thesaurus in `public/common/dict/`, and the fonts in `public/fonts/` (Carlito, Caladea and Gelasio, under the SIL Open Font License 1.1).
+**License: Apache License 2.0**, see [LICENSE](LICENSE) (see below).
 
-VibeOffice is an independent project. Microsoft, Word, Excel, PowerPoint and Office are trademarks of Microsoft Corporation; VibeOffice is not affiliated with Microsoft.
+**Independent.** VibeOffice is not affiliated with, endorsed by or sponsored by Microsoft Corporation, The Document Foundation or any other maker of office software. Microsoft, Word, Excel, PowerPoint and Office are trademarks of Microsoft Corporation, and LibreOffice is a trademark of The Document Foundation. Other names are trademarks of their owners. They appear here only to say which files VibeOffice works with and which programs it was tested against. In the apps, menu, command and template names follow Office's where people know them, so the apps feel familiar.
+
+**How compatibility was built.** VibeOffice reads and writes Office Open XML, the file format published as the standards ECMA-376 and ISO/IEC 29500. It is written from those standards and from the format documentation Microsoft publishes. Compatibility is checked from the outside, side by side: files from public test collections are opened, edited and saved, and the results are compared with what other programs make of the same files. LibreOffice and Microsoft Office are used in testing, as installed programs, to check that files work in both; no code from either is part of VibeOffice. VibeOffice was not built by examining Office's program code: no decompiling or disassembling, and no confidential documentation.
+
+**How the code is reviewed.** VibeOffice is written with the help of AI coding assistants. Such tools are trained on large amounts of public code, which may include LibreOffice and other office software, and can occasionally produce code that resembles their training material. To reduce that risk, VibeOffice's code is reviewed on an ongoing basis against the open-source projects it could most plausibly resemble: office suites such as LibreOffice, Apache OpenOffice, OnlyOffice and Gnumeric, and common open-source libraries. Code that matches or closely resembles work under terms VibeOffice does not accept is removed and rewritten independently, from published standards and mathematics, or replaced by an equivalent under a compatible licence. Code that matches permissively licensed work is kept and credited, as its licence requires. The project's contribution rules ([AGENTS.md](AGENTS.md)) apply the same terms to all new code. The first full review was completed in October 2026.
+
+**Code from other projects.** VibeOffice uses, or translates into JavaScript, only code under licences compatible with its own; that code is credited, with its licence, at [vibeoffice.work/oss-licenses.html](https://vibeoffice.work/oss-licenses.html). If you believe something in VibeOffice comes from your work without credit, please [open an issue](https://github.com/tcchen2026/VibeOffice/issues): we take such reports seriously and review each one.
+
+**Artwork.** The icons, clip art, app icons, the assistant's drawing and the sample documents are original. The menus and toolbars follow the general style of a classic desktop office suite; no artwork was copied from one.
+
+**No warranty.** VibeOffice is provided as is, without warranty of any kind (see [LICENSE](LICENSE)). Keep a copy of any file that matters before you edit it here.

@@ -48,7 +48,8 @@ and destinations beyond the ordinary selection probe, before making any changes.
 
 **Entering data.** Excel's own input rules: numbers, percentages, currency, fractions (`1 1/2`),
 dates and times in the usual short forms, a leading apostrophe for text, formulas with point mode
-(click or use the arrow keys to insert references, F4 to cycle `$`), colour-coded reference highlights,
+(click or use the arrow keys to insert references, also after F2 wherever the formula expects one; Shift+click
+extends the last one; F4 to cycle `$`), colour-coded reference highlights,
 AutoComplete from the column, AutoCorrect, AutoFill by dragging the fill handle (numbers, dates,
 weekdays, months, quarters, custom lists), Ctrl+Enter and Alt+Enter.
 
@@ -107,7 +108,9 @@ searchable topics, the keyboard-shortcut reference and a function reference for 
 - Charts in opened files are drawn from their own definitions (3-D charts flat; radar and stock charts
   as lines; bubble charts as scatter) and are saved back unchanged unless you edit them.
 - Pictures (PNG, JPEG, GIF, BMP, SVG and Windows metafiles — EMF and WMF are drawn by Ledger's own
-  metafile player), AutoShapes and text boxes: move, resize, copy, order, Format Object.
+  metafile player), AutoShapes and text boxes: move, resize, copy, order, Format Object; their text is edited in
+  place (a click in a text box, or on the text of a selected AutoShape, puts the caret there; a text box moves by its
+  edge).
 - Conditional formatting from newer files is shown too: data bars, colour scales and icon sets
   (including the Excel 2010 sets and custom icon combinations), and sparklines.
 
@@ -502,7 +505,7 @@ support for every formula or external data source.
 | `js/model.js`, `js/ops.js` | Workbook model (sparse rows, shared styles, names, tables), undo history, every editing operation |
 | `js/formula.js`, `js/calc.js` | Formula language (A1, R1C1, structured references, `@`, spills), calculation engine and dependency graph |
 | `js/fn-core.js`, `js/fn-lookup.js`, `js/fn-stat.js`, `js/fn-fin.js`, `js/fn-eng.js`, `js/fninfo.js` | The 519 worksheet functions and their catalogue for Insert Function |
-| `../common/numfmt.js`, `js/layout.js`, `js/render.js`, `js/cf.js`, `js/styles.js` | Number formats, text measurement, the canvas renderer, conditional formats, list styles |
+| `../common/numfmt.js`, `js/layout.js`, `js/render.js`, `js/cf.js`, `js/styles.js` | Number formats, text measurement, the canvas renderer (with the 17 cell fill patterns, as Excel draws them: docs/testing.md), conditional formats, list styles |
 | `js/grid.js`, `js/editor.js`, `js/clipboard.js` | Selection, scrolling, keyboard and mouse; in-cell editing and point mode; clipboard |
 | `js/preserve.js` | Package ownership, workbook/property merges and retained style indices |
 | `js/xlsx-read.js`, `js/xlsx-write.js`, `js/csv.js`, `js/xmlss.js` | File formats |
@@ -515,4 +518,4 @@ support for every formula or external data source.
 | `tests/ledger/` | The test harnesses described above (Node.js and Playwright) |
 
 Ledger is an independent program. Microsoft, Excel and Office are trademarks of Microsoft Corporation;
-Ledger is not affiliated with Microsoft.
+Ledger is not affiliated with Microsoft. More in the README (Legal).

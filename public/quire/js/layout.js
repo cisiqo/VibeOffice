@@ -107,18 +107,26 @@
     const lines = [];
     let prev = null; /* previous rect */
     let forceNew = false;
-    const lhCache = new Map();
-    const lhOf = (span) => {
+    const lhCache = new Map(), grid = +pc.dataset.grid || 0;
+    const metricsOf = (span) => {
       let v = lhCache.get(span);
-      if (v == null) { const cs = getComputedStyle(span); v = parseFloat(cs.lineHeight); if (isNaN(v)) v = parseFloat(cs.fontSize) * 1.2; lhCache.set(span, v); }
+      if (v == null) {
+        const cs = getComputedStyle(span), lh = parseFloat(cs.lineHeight);
+        /* on a document grid the line is the paragraph's (runs that fit are shorter; a superscript's 0 stays 0); with
+           the font's own line height (Word's single spacing; its text, centred in the line on a document grid) */
+        v = { lh: isNaN(lh) ? parseFloat(cs.fontSize) * 1.2 : lh > 0 ? Math.max(grid, lh) : lh, nat: parseFloat(cs.fontSize) * R.lineFactor(cs.fontFamily.split(',')[0].replace(/["']/g, '').trim()) };
+        lhCache.set(span, v);
+      }
       return v;
     };
-    const add = (o, rect, lh) => {
+    /** a line: its box (top, bottom) and where Word's text ends in it (text) */
+    const add = (o, rect, m) => {
+      const lh = m && m.lh;
       const top = (rect.top - frameTop) / scale, bottom = (rect.bottom - frameTop) / scale;
-      const half = lh != null ? Math.max(0, (lh - rect.height / scale) / 2) : 0;
+      const half = lh != null ? Math.max(0, (lh - rect.height / scale) / 2) : 0, text = m ? (top + bottom) / 2 + m.nat / 2 : bottom;
       const isNew = !prev || forceNew || (rect.left < prev.left - 1 && rect.top > prev.top + 0.5) || rect.top >= prev.bottom - 0.5 && rect.left <= prev.left;
-      if (isNew) lines.push({ o, top: top - half, bottom: bottom + half });
-      else { const ln = lines[lines.length - 1]; ln.bottom = Math.max(ln.bottom, bottom + half); ln.top = Math.min(ln.top, top - half); }
+      if (isNew) lines.push({ o, top: top - half, bottom: bottom + half, text });
+      else { const ln = lines[lines.length - 1]; ln.bottom = Math.max(ln.bottom, bottom + half); ln.top = Math.min(ln.top, top - half); ln.text = Math.max(ln.text, text); }
       prev = rect;
       forceNew = false;
     };
@@ -136,7 +144,7 @@
       const o0 = +node.dataset.o;
       const tn = node.firstChild;
       if (tn && tn.nodeType === 3 && node.contentEditable !== 'false') {
-        const lh = lhOf(node);
+        const sm = metricsOf(node);
         const text = tn.data;
         /* sample at break opportunities, refine with binary search between samples */
         let lastI = -1, lastR = null;
@@ -151,9 +159,9 @@
               const mr = charRect(tn, mid);
               if (mr && mr.top > lastR.top + 0.5 && mr.left < lastR.left + 1) hi = mid; else lo = mid + 1;
             }
-            if (lo < i) { const lr = charRect(tn, lo); if (lr) add(o0 + lo, lr, lh); }
+            if (lo < i) { const lr = charRect(tn, lo); if (lr) add(o0 + lo, lr, sm); }
           }
-          add(o0 + i, r, lh);
+          add(o0 + i, r, sm);
           lastI = i; lastR = r;
         };
         for (let i = 0; i < text.length; i++) {
@@ -271,10 +279,14 @@
       /* does not fit: split by lines */
       const lines = LY.lines(frag, frame.top, scale);
       /* Word's "multiple" line spacing: the last line on a page only needs its single-spaced height to
-         fit; the extra leading may run into the bottom margin (same capacity as Word and LibreOffice) */
+         fit; the extra leading may run into the bottom margin (same capacity as Word and LibreOffice).
+         On a document line grid Word centres the text in its line, and only the space below the text may
+         run into the margin, whatever the spacing (tools/linegrid.py) */
       const lsx = R.lineSpec(pPr);
-      const multX = !ctx.inCell && frame.kind === 'col' && lsx.mult > 1 && !lsx.atLeast && !lsx.exact ? lsx.mult : 1;
-      const slackOf = (ln) => (multX > 1 && ln ? (ln.bottom - ln.top) * (1 - 1 / multX) : 0);
+      const atFoot = !ctx.inCell && frame.kind === 'col' && !lsx.atLeast && !lsx.exact;
+      const onGrid = atFoot && ctx.grid && !pPr.noSnap;
+      const multX = atFoot && !onGrid && lsx.mult > 1 ? lsx.mult : 1;
+      const slackOf = (ln) => (!ln ? 0 : onGrid ? (ln.text != null ? Math.max(0, ln.bottom - ln.text) : 0) : multX > 1 ? (ln.bottom - ln.top) * (1 - 1 / multX) : 0);
       /* (an empty paragraph has no measured lines: its text bottom is the box minus the space after) */
       let textBottom;
       if (lines.length) textBottom = lines[lines.length - 1].bottom - slackOf(lines[lines.length - 1]);
@@ -809,6 +821,21 @@
     if (ty === 'SECTIONPAGES') return D.fmtNum(fieldCounts && fieldCounts.sections[page.si] || 1, f || 'decimal');
     if (ty === 'SECTION') return String(page.si + 1);
     return '';
+    /* a footer grows upwards from its bottom edge, so the paragraphs after a float's anchor moved it up: a float
+       placed from its paragraph (or line) follows it */
+    const z = LY.scale(), pgTop = page.el.getBoundingClientRect().top;
+    for (const frag of container.querySelectorAll('.p')) {
+      if (!frag._floats) continue;
+      const dy = (frag.getBoundingClientRect().top - pgTop) / z;
+      for (const w of frag._floats) {
+        const f = w._item && w._item.float, pos = w._pos;
+        if (!f || !pos || (f.posV.rel && f.posV.rel !== 'paragraph' && f.posV.rel !== 'line')) continue;
+        const shift = dy - pos.fragR.y;
+        if (Math.abs(shift) < 0.01) continue;
+        pos.y += shift; pos.baseY += shift; pos.fragR.y = dy;
+        w.style.top = pos.y + 'px';
+      }
+    }
   };
   /**
    * STYLEREF in a header or footer: the first (\l: last) text on this page in the given paragraph or
@@ -1051,6 +1078,12 @@
       numVal++;
     };
     const sectStartNum = (k) => { const s = sections[k].sect; return s.pgNum && s.pgNum.start != null ? s.pgNum.start : null; };
+    /** the section after section k starts on a new page (not continuous on the same paper, nor in a next column) */
+    const startsPage = (k) => {
+      if (k + 1 >= sections.length) return false;
+      const a = sections[k].sect, b = sections[k + 1].sect, type = b.type || 'nextPage';
+      return !((type === 'continuous' || (type === 'nextColumn' && region.frames.length > 1)) && Math.abs(b.pgW - a.pgW) < 1 && Math.abs(b.pgH - a.pgH) < 1);
+    };
     if (!fromPage) { const sn = sectStartNum(0); if (sn != null) numVal = sn; }
     startPage(false);
     let guard = 0;
@@ -1064,6 +1097,15 @@
       ctx.grid = dg && /^(lines|linesAndChars|snapToChars)$/.test(dg.type || '') && dg.linePitch > 0 ? px(dg.linePitch / 20) : 0;
       const res = LY.flow(fr, blocks, st, sec.to, ctx);
       st = res.st;
+      /* an empty paragraph that only carries the section break, pushed off a full page (or, Word 2013+, past a page
+         break), makes no page of its own when the next section starts on a new page anyway: it stays at the foot of
+         this one, into the margin if need be (the page count Word stores agrees) */
+      if ((res.stop === 'page' ? (d.settings && d.settings.compat) >= 15 : res.stop === 'full' && region.ci + 1 >= region.frames.length)
+        && !res.pbb && st.bi === sec.to - 1 && !st.sub && sec.endPara && !D.plen(sec.endPara) && startsPage(si)) {
+        fr.limit = Infinity;
+        const rest = LY.flow(fr, blocks, st, sec.to, ctx);
+        if (rest.stop === 'done') { st = rest.st; res.stop = 'done'; }
+      }
       /* Word 2013+ (compat 15): a page (or last-column) break that ends the section's last paragraph keeps
          the paragraph mark on its own page, so no empty page is made when the document ends or the next
          section starts on a new page anyway (older modes carry the mark over to a new page) */
@@ -1332,6 +1374,7 @@
     r.style.left = Math.max(10, (sw - w * z) / 2) + 'px';
   };
   LY.setZoom = function (z) {
+    if (L.ui && L.ui.dragCancel) L.ui.dragCancel();   /* what a drag measured is at the old zoom */
     LY.zoom = L.clamp(z, 0.1, 5);
     if (LY.view === 'web') return LY.render();
     LY.fitSizer();
@@ -1413,7 +1456,9 @@
   };
   /** choose the fragment for (p,o): prefer one where from <= o < to, else the one ending at o */
   LY.fragFor = function (p, o, scope) {
-    const fr = LY.frags(p.id, scope);
+    let fr = LY.frags(p.id, scope);
+    /* a header or footer is drawn on every page: while one is edited, the page it is edited on */
+    if (!scope && fr.length > 1 && LY.hfEdit) { const pg = LY.pages[LY.hfEdit.page], mine = pg ? fr.filter((f) => pg.el.contains(f)) : []; if (mine.length) fr = mine; }
     if (!fr.length) return null;
     let best = null;
     for (const f of fr) {

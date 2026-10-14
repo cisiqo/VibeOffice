@@ -72,7 +72,7 @@
     },
   };
 
-  /** a new presentation from the template; size: { w, h } (default 4:3) */
+  /** a new presentation from the template; size: { w, h } (default M.DEFAULT_SIZE, 16:9) */
   TL.build = function (id, size) {
     const t = LIST.find((x) => x.id === id);
     if (!t) return null;

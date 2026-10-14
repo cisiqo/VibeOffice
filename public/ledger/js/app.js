@@ -303,49 +303,67 @@
   function renderTabs() {
     const tabs = L.$('#tabs');
     const w = wb();
-    tabs.textContent = '';
     const selSet = new Set(A.selectedSheetsIdx());
+    /* the same sheets: only which tab is on changes, so a press that activates a tab keeps the element under the
+       pointer, and its click and double-click (Rename) still reach it */
+    const key = w.sheets.map((s) => s.state + '|' + s.name + '|' + JSON.stringify(s.tabColor || null)).join('\n');
+    if (tabs._w === w && tabs._key === key && !tabs.querySelector('input')) {
+      for (const t of L.$$('.stab', tabs)) {
+        const i = t._i;
+        t.classList.toggle('on', i === w.active);
+        t.classList.toggle('sel', selSet.has(i) && i !== w.active);
+        t.setAttribute('aria-selected', i === w.active ? 'true' : 'false');
+      }
+      scrollToActive(tabs);
+      return;
+    }
+    tabs._w = w; tabs._key = key;
+    tabs.textContent = '';
     w.sheets.forEach((s, i) => {
       if (s.state !== 'visible') return;
       const t = h('div', { class: 'stab' + (i === w.active ? ' on' : '') + (selSet.has(i) && i !== w.active ? ' sel' : '') + (s.tabColor ? ' colored' : ''), role: 'tab', 'aria-selected': i === w.active ? 'true' : 'false', draggable: 'false' }, h('span', { text: s.name }));
+      t._i = i;
       if (s.tabColor) t.style.setProperty('--tabc', M.colorHex(w, s.tabColor, '#ECE9D8'));
       t.addEventListener('pointerdown', (e) => {
-        if (e.button === 2) { if (!selSet.has(i)) A.activateSheet(i); return; }
+        if (e.target.closest('input')) return;   // the name being edited in place
+        if (e.button === 2) { if (!A.selectedSheetsIdx().includes(i)) A.activateSheet(i); return; }
         e.preventDefault();
+        if (e.button !== 0) return;
         if (e.ctrlKey || e.metaKey) { A.toggleSheetSel(i); return; }
         if (e.shiftKey) { A.rangeSheetSel(i); return; }
         A.activateSheet(i);
         if (G().readOnly) return;
-        /* drag to reorder (Ctrl copies) */
-        const x0 = e.clientX;
-        let moved = false, target = null;
-        const mv = (ev) => {
-          if (Math.abs(ev.clientX - x0) > 6) moved = true;
-          if (!moved) return;
-          L.$$('.stab', tabs).forEach((x) => x.classList.remove('drop-before'));
-          const els = L.$$('.stab', tabs);
-          target = null;
-          for (const el of els) { const r = el.getBoundingClientRect(); if (ev.clientX < r.left + r.width / 2) { el.classList.add('drop-before'); target = el; break; } }
-        };
-        const up = (ev) => {
-          document.removeEventListener('pointermove', mv); document.removeEventListener('pointerup', up);
-          L.$$('.stab', tabs).forEach((x) => x.classList.remove('drop-before'));
-          if (!moved) return;
-          const names = L.$$('.stab', tabs).map((x) => x.textContent);
-          let to = target ? w.sheets.findIndex((s2) => s2.name === target.textContent) : w.sheets.length;
-          try {
-            if (ev.ctrlKey || ev.metaKey) { const c = O.copySheet(w, w.sheets[i], to); w.active = w.sheets.indexOf(c); }
-            else O.moveSheet(w, w.sheets[i], to);
-          } catch (err) { A.error(err); }
-          void names;
-          renderTabs(); G().paint(); ui.refresh();
-        };
-        document.addEventListener('pointermove', mv); document.addEventListener('pointerup', up);
+        /* drag to reorder (Ctrl copies): a mark shows where it goes; a cancel moves nothing */
+        let target = null;
+        const unmark = () => L.$$('.stab', tabs).forEach((x) => x.classList.remove('drop-before'));
+        ui.drag(e, {
+          capture: t,   // the tab itself, so its click and double-click (Rename) come to it
+          threshold: 6,
+          move(ev) {
+            unmark();
+            target = null;
+            for (const el of L.$$('.stab', tabs)) { const r = el.getBoundingClientRect(); if (ev.clientX < r.left + r.width / 2) { el.classList.add('drop-before'); target = el; break; } }
+          },
+          up(ev, d) {
+            unmark();
+            if (!d.moved) return;
+            const to = target ? w.sheets.findIndex((s2) => s2.name === target.textContent) : w.sheets.length;
+            try {
+              if (ev.ctrlKey || ev.metaKey) { const c = O.copySheet(w, w.sheets[i], to); w.active = w.sheets.indexOf(c); }
+              else O.moveSheet(w, w.sheets[i], to);
+            } catch (err) { A.error(err); }
+            renderTabs(); G().paint(); ui.refresh();
+          },
+          cancel: unmark,
+        });
       });
       t.addEventListener('dblclick', () => { if (!G().readOnly) A.renameSheetInline(i); });
       t.addEventListener('contextmenu', (e) => { e.preventDefault(); if (!G().readOnly) tabMenu(e, i); });
       tabs.appendChild(t);
     });
+    scrollToActive(tabs);
+  }
+  function scrollToActive(tabs) {
     const at = tabs.querySelector('.stab.on');
     if (at) { const r = at.getBoundingClientRect(), pr = tabs.getBoundingClientRect(); if (r.right > pr.right || r.left < pr.left) tabs.scrollLeft += r.left - pr.left - 20; }
   }
@@ -356,6 +374,7 @@
   A.toggleSheetSel = (i) => { if (!sheetSel) sheetSel = new Set([wb().active]); if (sheetSel.has(i) && i !== wb().active) sheetSel.delete(i); else sheetSel.add(i); renderTabs(); updateTitle(); };
   A.rangeSheetSel = (i) => { const a = wb().active; sheetSel = new Set(); for (let k = Math.min(a, i); k <= Math.max(a, i); k++) if (wb().sheets[k].state === 'visible') sheetSel.add(k); renderTabs(); };
   A.activateSheet = function (i) {
+    L.ui.dragCancel();   /* another sheet: a drag on this one ends */
     const w = wb();
     if (L.editor.active) {
       if (L.editor.canPoint()) { w.active = i; sheetSel = null; renderTabs(); G().paint(true); G().syncObjects(true); L.editor.sheetChanged(); return; }
@@ -423,11 +442,14 @@
     /* the split bar between tabs and the horizontal scroll bar */
     const sp = L.$('#tabsplit');
     sp.addEventListener('pointerdown', (e) => {
-      e.preventDefault(); sp.setPointerCapture(e.pointerId);
-      const x0 = e.clientX, w0 = tabs.offsetWidth;
-      const mv = (ev) => { tabs.style.width = L.clamp(w0 + ev.clientX - x0, 40, L.$('#tabrow').offsetWidth - 120) + 'px'; G().paint(); };
-      const up = () => { sp.removeEventListener('pointermove', mv); sp.removeEventListener('pointerup', up); };
-      sp.addEventListener('pointermove', mv); sp.addEventListener('pointerup', up);
+      e.preventDefault();
+      if (e.button !== 0) return;
+      const x0 = e.clientX, w0 = tabs.offsetWidth, before = tabs.style.width;
+      ui.drag(e, {
+        capture: sp,
+        move(ev) { tabs.style.width = L.clamp(w0 + ev.clientX - x0, 40, L.$('#tabrow').offsetWidth - 120) + 'px'; G().paint(); },
+        cancel() { tabs.style.width = before; G().paint(); },
+      });
     });
   }
   A.insertSheet = function () {
@@ -663,7 +685,8 @@
     };
     const sameRange = (a, rg) => { if (a.sheet && a.sheet.toLowerCase() !== sh().name.toLowerCase()) return false; if (a.t === 'ref') return rg.r1 === a.r && rg.r2 === a.r && rg.c1 === a.c && rg.c2 === a.c; return rg.r1 === Math.min(a.r1, a.r2) && rg.r2 === Math.max(a.r1, a.r2) && rg.c1 === Math.min(a.c1, a.c2) && rg.c2 === Math.max(a.c1, a.c2); };
     L.bus.on('selection', show); L.bus.on('sheet', show); L.bus.on('book', show); L.bus.on('changed', show);
-    nb.addEventListener('focus', () => nb.select());
+    /* the Name Box takes the keyboard: what is being typed in a cell is entered first, as a click elsewhere does */
+    nb.addEventListener('focus', () => { if (L.editor.active && !L.editor.commit({ keepFocus: true })) { nb.blur(); return; } nb.select(); });
     nb.addEventListener('keydown', (e) => {
       e.stopPropagation();
       if (e.key === 'Escape') { nb.blur(); show(); G().focus(); return; }

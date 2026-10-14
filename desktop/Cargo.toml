@@ -57,3 +57,8 @@ strip = true
 # setup/: the Windows installer, carrying this app (build.sh)
 [workspace]
 members = [".", "setup"]
+
+# no MPL code in what ships (AGENTS.md, Code from other projects): dirs-sys's option-ext (MPL-2.0) is replaced by our
+# own crate with the one method it uses
+[patch.crates-io]
+option-ext = { path = "patches/option-ext" }

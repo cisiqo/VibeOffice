@@ -46,6 +46,21 @@
   .caching { padding: 2px 8px 4px; color: var(--muted); font-size: 11px; }
   .caching progress { display: block; width: 100%; height: 8px; margin-top: 3px; accent-color: var(--sel); }
   .caching #cachingsize { display: block; margin-top: 1px; text-align: right; }
+  /* after an update: a notice whose green tick draws itself, then pulses a few times, so it is seen */
+  .updated { display: flex; align-items: center; gap: 10px; width: 100%; margin: 2px 0 6px; padding: 8px 10px; border: 1px solid var(--notice-line);
+    border-left: 4px solid var(--notice-mark); border-radius: 4px; background: var(--notice-bg); color: var(--pane-ink); font: inherit; text-align: left;
+    cursor: pointer; box-shadow: 0 1px 3px rgba(0,0,0,.12); }
+  .updated:hover, .updated:focus-visible { background: var(--notice-hot); }
+  .updated b { display: block; color: var(--notice-ink); font-size: 13px; }
+  .updated small { display: block; color: var(--pane-link); text-decoration: underline; }
+  .updated .mark { position: relative; flex: none; display: flex; border-radius: 50%; }
+  .updated .mark circle { fill: var(--notice-mark); transform-origin: 50% 50%; animation: vo-pop .35s ease-out backwards; }
+  .updated .mark path { fill: none; stroke: #fff; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; stroke-dasharray: 16; animation: vo-tick .45s ease-out .3s backwards; }
+  .updated .mark::after { content: ""; position: absolute; inset: 0; border-radius: 50%; opacity: 0; animation: vo-pulse 1.6s ease-out .8s 4; }
+  @keyframes vo-pop { from { transform: scale(0); } 70% { transform: scale(1.15); } to { transform: scale(1); } }
+  @keyframes vo-tick { from { stroke-dashoffset: 16; } to { stroke-dashoffset: 0; } }
+  @keyframes vo-pulse { from { box-shadow: 0 0 0 0 var(--notice-mark); opacity: .6; } to { box-shadow: 0 0 0 9px var(--notice-mark); opacity: 0; } }
+  @media (prefers-reduced-motion: reduce) { .updated .mark circle, .updated .mark path, .updated .mark::after { animation: none; } }
   .side .note { margin: 0; padding: 0 8px; color: var(--muted); font-size: 11px; }
   .link { border: 0; background: none; padding: 0; color: var(--pane-link); cursor: pointer; text-decoration: underline; }
   .side .links { display: flex; flex-wrap: wrap; gap: 4px 12px; margin-top: -4px; }
@@ -176,7 +191,7 @@
       <button class="big" id="update" type="button" hidden><svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="8.5" fill="#1f8a4c"/><path d="M10 5v7.5M6.5 9.5l3.5 3.5 3.5-3.5" fill="none" stroke="#fff" stroke-width="2"/><path d="M6 15.5h8" stroke="#fff" stroke-width="1.6"/></svg>Update VibeOffice</button>
       <button class="big" id="install" type="button" hidden><svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true"><rect x="2" y="3" width="16" height="12" rx="1.5" fill="#fff" stroke="#3b619c"/><path d="M10 5.5v6M7 9l3 3 3-3" fill="none" stroke="#1f8a4c" stroke-width="1.8"/><path d="M6 17.5h8" stroke="#3b619c"/></svg>Install VibeOffice.work</button>
       <div class="caching" id="caching" role="status" hidden><span id="cachingtext">Updating cached resources</span><progress id="cachingbar" max="1" value="0"></progress><span id="cachingsize"></span></div>
-      <button class="big" id="cachingreload" type="button" hidden><svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="8.5" fill="#1f8a4c"/><path d="M14 7.2A4.6 4.6 0 1 0 14.6 11" fill="none" stroke="#fff" stroke-width="1.8"/><path d="M14.8 4.4v3.6h-3.6" fill="none" stroke="#fff" stroke-width="1.8"/></svg>Update done, reload</button>
+      <button class="updated" id="cachingreload" type="button" hidden><span class="mark" aria-hidden="true"><svg width="22" height="22" viewBox="0 0 20 20"><circle cx="10" cy="10" r="9.5"/><path d="M5.6 10.3l3 3 5.9-6.2"/></svg></span><span><b>Just updated successfully</b><small>Click here to reload</small></span></button>
       <a class="big" id="feedback" href="https://github.com/tcchen2026/VibeOffice" target="_blank" rel="noopener"><svg width="20" height="20" viewBox="0 0 16 16" aria-hidden="true"><path fill="#24292f" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>Feedback on our GitHub</a>
     </div>
     <p class="note">Your files stay on this computer. Recent files are kept in this browser only.<br><span class="version"></span></p>

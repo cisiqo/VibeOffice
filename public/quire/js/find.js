@@ -11,6 +11,8 @@
   const FD = (L.find = {});
   const doc = () => D.doc;
   const A = () => L.app;
+  /* what the Find and Replace dialog shows: it stays open and keeps the keyboard (Enter is Find Next again) */
+  const KEEP = { focus: false };
 
   /* ---------- story text with paragraph marks ---------- */
   function storyText(story) {
@@ -255,7 +257,7 @@
       i = L.clamp(i, 0, LY.pages.length - 1);
       const pg = LY.pages[i];
       const f = pg && pg.body.querySelector('.p');
-      if (f) { const p = D.byId(d, +f.dataset.pid); A().gotoPos(D.pos(p, +f.dataset.from || 0)); pg.el.scrollIntoView({ block: 'start' }); }
+      if (f) { const p = D.byId(d, +f.dataset.pid); A().gotoPos(D.pos(p, +f.dataset.from || 0), null, KEEP); pg.el.scrollIntoView({ block: 'start' }); }
       return true;
     }
     if (kind === 'line') {
@@ -265,7 +267,7 @@
         let count = 0;
         for (const pg of LY.pages) for (const f of pg.el.querySelectorAll('.pg-body .p')) {
           const lines = LY.lines(f, f.getBoundingClientRect().top, LY.zoom);
-          if (count + lines.length >= target) { const ln = lines[target - count - 1]; const p = D.byId(d, +f.dataset.pid); A().gotoPos(D.pos(p, ln ? ln.o : 0)); return true; }
+          if (count + lines.length >= target) { const ln = lines[target - count - 1]; const p = D.byId(d, +f.dataset.pid); A().gotoPos(D.pos(p, ln ? ln.o : 0), null, KEEP); return true; }
           count += lines.length;
         }
       }
@@ -279,7 +281,7 @@
       for (let k = 0; k < n; k++) L.panes.browseTo(map[kind], 1);
       return true;
     }
-    if (kind === 'section' && val) { const secs = D.sections(d); const s = secs[L.clamp((rel ? 0 : n) - 1, 0, secs.length - 1)]; const b0 = d.main.blocks[s.from]; const p = b0.t === 'p' ? b0 : D.firstPara([b0]); A().gotoPos(D.pos(p, 0)); return true; }
+    if (kind === 'section' && val) { const secs = D.sections(d); const s = secs[L.clamp((rel ? 0 : n) - 1, 0, secs.length - 1)]; const b0 = d.main.blocks[s.from]; const p = b0.t === 'p' ? b0 : D.firstPara([b0]); A().gotoPos(D.pos(p, 0), null, KEEP); return true; }
     L.panes.browseTo(map[kind], dir || (rel && n < 0 ? -1 : 1));
     return true;
   };
@@ -343,18 +345,20 @@
     const findNext = () => {
       remember();
       try {
-        if (state.highlight && curTab === 0) { const n = FD.highlightAll(opts()); A().status(n < 0 ? 'Highlighting is not supported in this browser.' : `Quire found ${n} item${n === 1 ? '' : 's'} matching this criteria.`); if (n > 0) { const hit = FD.next(opts()); if (hit) A().gotoPos(hit.a, hit.b); } return; }
+        if (state.highlight && curTab === 0) { const n = FD.highlightAll(opts()); A().status(n < 0 ? 'Highlighting is not supported in this browser.' : `Quire found ${n} item${n === 1 ? '' : 's'} matching this criteria.`); if (n > 0) { const hit = FD.next(opts()); if (hit) A().gotoPos(hit.a, hit.b, KEEP); } return; }
         FD.wrapped = false;
         const hit = FD.next(opts());
         if (!hit) { ui.msg(`Quire has finished searching the document. The search item was not found.`, { icon: 'info' }); return; }
-        A().gotoPos(hit.a, hit.b);
+        A().gotoPos(hit.a, hit.b, KEEP);
         if (FD.wrapped) A().status('Quire reached the end of the document and continued from the beginning.');
       } catch (e) { if (e.message !== 'empty') ui.msg(e.message, { icon: 'warn' }); }
     };
-    const replace = () => { remember(); try { const hit = FD.replaceOne(opts()); if (hit) A().gotoPos(hit.a, hit.b); else ui.msg('Quire has finished searching the document.', { icon: 'info' }); } catch (e) { if (e.message !== 'empty') ui.msg(e.message, { icon: 'warn' }); } };
+    /* the dialog keeps the keyboard where it was (an edit in the page takes it there) */
+    const keepKeys = (fn) => () => { const back = document.activeElement; fn(); if (back && dlg && dlg.el.contains(back) && document.activeElement !== back) back.focus(); };
+    const replace = keepKeys(() => { remember(); try { const hit = FD.replaceOne(opts()); if (hit) A().gotoPos(hit.a, hit.b, KEEP); else ui.msg('Quire has finished searching the document.', { icon: 'info' }); } catch (e) { if (e.message !== 'empty') ui.msg(e.message, { icon: 'warn' }); } });
     const replaceAll = () => { remember(); try { const n = FD.replaceAll(opts()); ui.msg(n ? `Quire has completed its search of the document and has made ${n} replacement${n === 1 ? '' : 's'}.` : 'Quire has finished searching the document. The search item was not found.', { icon: 'info' }); } catch (e) { if (e.message !== 'empty') ui.msg(e.message, { icon: 'warn' }); } };
     const body = h('div', { class: 'col' }, tabs, more, foot);
-    dlg = ui.dialog({ title: 'Find and Replace', width: 470, body, modeless: true, buttons: [], focus: mode === 'goto' ? gotoIn : findIn, onClose: () => { open = null; FD.clearHighlight(); } });
+    dlg = ui.dialog({ title: 'Find and Replace', width: 470, body, modeless: true, buttons: [], focus: mode === 'goto' ? gotoIn : findIn, onClose: () => { open = null; FD.clearHighlight(); E.refocus(); } });   /* the found text is the page's selection again */
     dlg.el.querySelector('.dlg-foot').remove();
     dlg.el.addEventListener('keydown', (e) => {
       if (e.key === 'Enter' && e.target.tagName === 'INPUT') { e.preventDefault(); if (curTab === 2) gotoBtn.click(); else bFind.click(); }

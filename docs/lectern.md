@@ -13,10 +13,10 @@ Open https://vibeoffice.work/lectern/ (to run it locally, see [testing.md](testi
 | `../common/sha.js`, `../common/crypto.js` | Password-protected presentations: ECMA-376 Agile and Standard encryption (AES, SHA-1/SHA-2), read and write |
 | `../common/zip.js` | ZIP reader/writer (CompressionStream with a pure-JS inflate fallback) |
 | `../common/xml.js`, `../common/opc.js`, `../common/opc-order.js` | Shared OOXML preservation graph, identities, namespace capture and schema order |
-| `../common/geometry.js` | 92 AutoShape presets, adjust handles, text rectangles, connectors |
+| `../common/geometry.js` | 92 AutoShape presets, adjust handles, text rectangles, connectors; the 54 preset pattern fills (shared with Quire) |
 | `js/designs.js` | Imported master/layout library, selective design changes and independent design copies |
 | `js/properties.js` | Shape/text properties, tags, actions and transitions retained until their owning property changes |
-| `js/model.js` | Presentation model, 14 design templates, 21 slide layouts, undo history |
+| `js/model.js` | Presentation model, 15 design templates, 21 slide layouts, undo history |
 | `js/render.js` | DOM/SVG renderer for slides, fills, patterns, gradients, WordArt |
 | `../common/metafile.js` | WMF/EMF player, so old clip art, logos and pasted Excel/Visio graphics display |
 | `../common/numfmt.js` | Excel number formats (dates, currency, percentages, sections) for chart axes and data labels |
@@ -37,7 +37,7 @@ Open https://vibeoffice.work/lectern/ (to run it locally, see [testing.md](testi
 | `js/pptx-read.js` | PresentationML import (themes, masters, layouts, placeholders, table styles, charts, SmartArt, custom geometry, animations; repairs damaged packages) |
 | `js/pptx-write.js` | PresentationML export (validated against the OOXML schema) |
 | `js/commands.js` | Every menu/toolbar command |
-| `js/app.js` | Application wiring, keyboard shortcuts, clipboard, sample deck |
+| `js/app.js` | Application wiring, keyboard shortcuts, clipboard, sample deck (Harbor & Pine Coffee, 16:9 on the Evergreen design: a title picture drawn with shapes, figure cards, a chart, a table, a shape timeline, a Funnel, builds) |
 | `js/templates.js` | Content templates (Project Status Report, Team Meeting, Lesson, Event Announcement) for the Start Center and File ▸ New |
 | `tests/lectern/` | The real-file test harness described below |
 
@@ -92,7 +92,7 @@ Checked (2026-10-10): a deck with one diagram per layout (26) passes the Open XM
 
 ## Slide size
 
-File ▸ Page Setup. Choose *Widescreen (16:9)* (13.33 × 7.5 in, today's PowerPoint default) or *On-screen Show (16:9)* (10 × 5.63 in). Pictures, shapes, charts and tables keep their proportions; placeholders reflow to the new frame. Tick *Use for new presentations* to make it the default.
+New presentations, templates and the sample are *Widescreen (16:9)* (13.33 × 7.5 in), as in PowerPoint since 2013 (`L.model.DEFAULT_SIZE`). File ▸ Page Setup changes it: for example *On-screen Show (4:3)* or *On-screen Show (16:9)* (10 × 5.63 in). Pictures, shapes, charts and tables keep their proportions; placeholders reflow to the new frame. Tick *Use for new presentations* to make that size the default.
 
 ## Saving
 

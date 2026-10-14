@@ -113,25 +113,34 @@
     return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
   };
   C.rgbToHex = (r, g, b) => '#' + [r, g, b].map((v) => L.clamp(Math.round(v), 0, 255).toString(16).padStart(2, '0')).join('').toUpperCase();
+  /** RGB (0-255) to HSL (0-1): lightness the middle of the largest and smallest channel, saturation their difference
+      over their sum (over 2 − their sum above half lightness), hue from the largest channel's sextant (Foley and
+      van Dam, "RGB to HLS") */
   C.rgbToHsl = (r, g, b) => {
-    r /= 255; g /= 255; b /= 255;
-    const max = Math.max(r, g, b), min = Math.min(r, g, b);
-    let h = 0, s = 0; const l = (max + min) / 2;
-    if (max !== min) {
-      const d = max - min;
-      s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
-      if (max === r) h = (g - b) / d + (g < b ? 6 : 0);
-      else if (max === g) h = (b - r) / d + 2;
-      else h = (r - g) / d + 4;
-      h /= 6;
-    }
-    return [h, s, l];
+    const R = r / 255, G = g / 255, B = b / 255;
+    const top = Math.max(R, G, B), bottom = Math.min(R, G, B), l = (top + bottom) / 2;
+    if (top === bottom) return [0, 0, l];
+    const span = top - bottom;
+    const s = l > 0.5 ? span / (2 - top - bottom) : span / (top + bottom);
+    let h;
+    if (top === R) h = (G - B) / span + (G < B ? 6 : 0);
+    else if (top === G) h = 2 + (B - R) / span;
+    else h = 4 + (R - G) / span;
+    return [h / 6, s, l];
   };
+  /** HSL (0-1) to RGB (0-255): the algorithm of CSS Color Level 3, 4.2.4 ("hsl.to.rgb" and "hue.to.rgb") */
   C.hslToRgb = (h, s, l) => {
     if (s === 0) return [l * 255, l * 255, l * 255];
-    const hue = (p, q, t) => { if (t < 0) t += 1; if (t > 1) t -= 1; if (t < 1 / 6) return p + (q - p) * 6 * t; if (t < 1 / 2) return q; if (t < 2 / 3) return p + (q - p) * (2 / 3 - t) * 6; return p; };
-    const q = l < 0.5 ? l * (1 + s) : l + s - l * s, p = 2 * l - q;
-    return [hue(p, q, h + 1 / 3) * 255, hue(p, q, h) * 255, hue(p, q, h - 1 / 3) * 255];
+    const m2 = l < 0.5 ? l * (s + 1) : l + s - l * s, m1 = l * 2 - m2;
+    const hueToRgb = (x) => {
+      if (x < 0) x += 1;
+      if (x > 1) x -= 1;
+      if (x < 1 / 6) return m1 + (m2 - m1) * 6 * x;
+      if (x < 1 / 2) return m2;
+      if (x < 2 / 3) return m1 + (m2 - m1) * (2 / 3 - x) * 6;
+      return m1;
+    };
+    return [hueToRgb(h + 1 / 3) * 255, hueToRgb(h) * 255, hueToRgb(h - 1 / 3) * 255];
   };
   C.mix = (a, b, t) => { const x = C.hexToRgb(a), y = C.hexToRgb(b); return C.rgbToHex(x[0] + (y[0] - x[0]) * t, x[1] + (y[1] - x[1]) * t, x[2] + (y[2] - x[2]) * t); };
   C.lighten = (hex, t) => C.mix(hex, '#FFFFFF', t);

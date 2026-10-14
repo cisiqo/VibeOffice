@@ -19,6 +19,7 @@
     beforeExec() {},
     refocus() { if (L.ed) L.ed.refocus(); },
     commitEdit() { if (L.ed && L.ed.textSave) L.ed.textSave(); },
+    ownsText: (el) => !!(L.ed && L.ed.scroller && L.ed.scroller.contains(el)),   /* the slide's text, not the notes */
   };
   /* colour menus offer the design's theme colours first */
   ui.currentDesign = () => (L.ed && L.ed.slide && L.pres ? M.design(L.pres, L.ed.slide()) : null);
@@ -260,6 +261,7 @@
   A.toggleToolbar = (id) => { const v = A.opts.toolbars[id]; A.opts.toolbars[id] = v === true ? (['picture', 'tables', 'wordart', 'diagram'].includes(id) ? false : false) : true; A.saveOpts(); A.updateToolbars(); };
   A.updateToolbars = function () {
     if (!A.toolbarsEl) return;
+    if (E.holdLayout && E.holdLayout(A.updateToolbars)) return;   /* not under a press on the slide (editor.js) */
     for (const id of ['standard', 'formatting', 'drawing', 'outlining', 'picture', 'tables', 'wordart', 'diagram']) A.toolbarsEl[id].hidden = !A.tbShown(id) || (A.view === 'preview');
     A.toolbarsEl.outlining.hidden = !(A.opts.toolbars.outlining === true || (L.panes.left.tab === 'outline' && A.view === 'normal' && A.opts.toolbars.outlining !== false && false));
     A.toolbarsEl.master.hidden = A.view !== 'master';
@@ -1886,127 +1888,221 @@ addEventListener('resize',fit);fit();show(0);<\/script></body></html>`], { type:
   /* ================= splitters ================= */
   function setupSplitters() {
     const sl = L.$('#split-left'), sn = L.$('#split-notes');
+    /* splitter drags (common/ui.js ui.drag): they follow the pointer at once; Esc or a lost release puts the pane back */
     sl.addEventListener('pointerdown', (e) => {
+      if (e.button !== 0) return;
       e.preventDefault();
-      sl.setPointerCapture(e.pointerId);
-      const x0 = e.clientX, w0 = L.$('#leftpane').offsetWidth;
-      const mv = (ev) => { const w = L.clamp(w0 + ev.clientX - x0, 110, 420); L.$('#leftpane').style.width = w + 'px'; A.opts.leftW = w; };
-      const up = () => { sl.removeEventListener('pointermove', mv); sl.removeEventListener('pointerup', up); L.panes.left.render(); E.layout(); A.saveOpts(); };
-      sl.addEventListener('pointermove', mv); sl.addEventListener('pointerup', up);
+      const w0 = L.$('#leftpane').offsetWidth, was = A.opts.leftW;
+      const size = (w) => { L.$('#leftpane').style.width = w + 'px'; };
+      ui.drag(e, {
+        threshold: 0,
+        move: (ev, d) => { const w = L.clamp(w0 + d.dx, 110, 420); size(w); A.opts.leftW = w; },
+        up: (ev, d) => { if (!d.moved) return; L.panes.left.render(); E.layout(); A.saveOpts(); },
+        cancel: () => { size(w0); A.opts.leftW = was; E.layout(); },
+      });
     });
     sn.addEventListener('pointerdown', (e) => {
+      if (e.button !== 0) return;
       e.preventDefault();
-      sn.setPointerCapture(e.pointerId);
-      const y0 = e.clientY, h0 = L.$('#notes').offsetHeight;
-      const mv = (ev) => { const hh = L.clamp(h0 - (ev.clientY - y0), 24, 420); L.$('#notes').style.height = hh + 'px'; A.opts.notesH = hh; };
-      const up = () => { sn.removeEventListener('pointermove', mv); sn.removeEventListener('pointerup', up); E.layout(); A.saveOpts(); };
-      sn.addEventListener('pointermove', mv); sn.addEventListener('pointerup', up);
+      const h0 = L.$('#notes').offsetHeight, was = A.opts.notesH;
+      const size = (hh) => { L.$('#notes').style.height = hh + 'px'; };
+      ui.drag(e, {
+        threshold: 0,
+        move: (ev, d) => { const hh = L.clamp(h0 - d.dy, 24, 420); size(hh); A.opts.notesH = hh; },
+        up: (ev, d) => { if (!d.moved) return; E.layout(); A.saveOpts(); },
+        cancel: () => { size(h0); A.opts.notesH = was; E.layout(); },
+      });
     });
   }
 
   /* ================= sample presentation ================= */
+  /* Harbor & Pine Coffee's expansion plan, 16:9 on the Evergreen design: a drawn title picture, figures, a chart,
+     a table, a timeline of shapes, an IntelliArt funnel, builds and transitions */
   function buildSample() {
-    const pres = M.newPresentation({ design: 'azure', empty: true });
-    const did = Object.keys(pres.designs)[0];
+    const pres = M.newPresentation({ design: 'evergreen', empty: true, w: 960, h: 540 });
+    const did = Object.keys(pres.designs)[0], design = pres.designs[did];
+    const W = pres.W, H = pres.H, P = T.para, MJ = '+mj', GREY = '#7A7068';
     pres.props.title = 'Harbor & Pine Coffee — 2027 Expansion Plan (sample)';
     pres.props.author = 'Sample';
-    const add = (layout) => { const s = M.newSlide(pres, layout, did); pres.slides.push(s); return s; };
     const ph = (s, t) => s.shapes.find((x) => x.ph && x.ph.type === t);
-    /* 1 */
-    let s = add('title');
-    T.setPlain(ph(s, 'ctrTitle').tx, 'Harbor & Pine Coffee');
-    ph(s, 'subTitle').tx.ps = [T.para('2027 Expansion Plan'), T.para('Sample presentation · Board review, October 2026', null, { sz: 18, i: true })];
-    s.trans = { type: 'fade', spd: 'med', click: true, after: null };
-    s.notes = 'This is a sample deck. Open your own .pptx from File ▸ Open, or start fresh with File ▸ New.';
-    /* 2 */
-    s = add('text');
-    T.setPlain(ph(s, 'title').tx, 'Where we stand today');
-    const b = ph(s, 'body');
-    b.tx.ps = T.fromLines(['14 cafés across three coastal cities', 'Same-store sales up 11% year over year', '\tMorning traffic is the strongest daypart', 'Wholesale beans now 22% of revenue', 'Roastery running at 64% of capacity']);
-    s.anims = [{ id: L.uid('a'), sid: b.id, cls: 'entr', eff: 'fade', start: 'click', dur: 500, delay: 0, by: 'para' }];
-    s.trans = { type: 'push', dir: 'u', spd: 'med', click: true, after: null };
-    s.notes = 'Lead with momentum: comparable-store growth and a roastery with headroom.';
-    /* 3 */
-    s = add('chart');
-    T.setPlain(ph(s, 'title').tx, 'Revenue by region ($K)');
-    const cp = ph(s, 'chart');
-    const chart = { id: L.uid('s'), type: 'chart', name: 'Chart 2', ph: L.clone(cp.ph), x: cp.x, y: cp.y, w: cp.w, h: cp.h, rot: 0, chart: { kind: 'col', title: '', legend: 'b', gridY: true, labels: false, fsz: 12, cats: ['Q1', 'Q2', 'Q3', 'Q4'], series: [{ name: 'Portland', vals: [410, 455, 520, 560], color: '#4A7BC8' }, { name: 'Seattle', vals: [380, 402, 446, 490], color: '#E0A526' }, { name: 'Monterey', vals: [120, 138, 171, 205], color: '#2D6BB5' }] } };
-    s.shapes.splice(s.shapes.indexOf(cp), 1, chart);
-    s.anims = [{ id: L.uid('a'), sid: chart.id, cls: 'entr', eff: 'wipe', dir: 'b', start: 'after', dur: 1000, delay: 0, by: 'all' }];
-    s.trans = { type: 'wipe', dir: 'r', spd: 'med', click: true, after: null };
-    /* 4 */
-    s = add('table');
-    T.setPlain(ph(s, 'title').tx, 'Rollout schedule');
-    const tp = ph(s, 'tbl');
-    const t = M.newTable(pres, s, 5, 4, tp.x, tp.y, tp.w);
-    t.ph = L.clone(tp.ph);
-    const data = [['Phase', 'Market', 'New stores', 'Opens'], ['1', 'Tacoma, WA', '2', 'March 2027'], ['2', 'Santa Cruz, CA', '3', 'June 2027'], ['3', 'Bend, OR', '2', 'September 2027'], ['4', 'Boise, ID', '3', 'January 2028']];
-    data.forEach((row, ri) => row.forEach((v, ci) => {
-      const cell = t.tbl.rows[ri].cells[ci];
-      cell.tx.ps = [T.para(v, { algn: ci === 0 || ci === 2 ? 'ctr' : 'l' }, ri === 0 ? { sz: 20, b: true, color: 'lt1' } : { sz: 20 })];
-      cell.fill = ri === 0 ? { t: 'solid', c: 'accent1', a: 1 } : ri % 2 ? { t: 'solid', c: '#E4ECF8', a: 1 } : { t: 'solid', c: '#FFFFFF', a: 1 };
-      for (const k of ['l', 'r', 't', 'b']) cell.bd[k] = { c: '#9BB7E3', w: 1, dash: 'solid' };
-      cell.tx.anchor = 'ctr';
-    }));
-    t.tbl.rows.forEach((r) => { r.h = 46; });
-    t.h = 46 * 5;
-    t.tbl.cols = [tp.w * 0.14, tp.w * 0.38, tp.w * 0.2, tp.w * 0.28];
-    s.shapes.splice(s.shapes.indexOf(tp), 1, t);
-    s.trans = { type: 'cover', dir: 'l', spd: 'med', click: true, after: null };
-    s.notes = 'Ten new stores over five quarters; each phase starts only after the prior one is cash-positive.';
-    /* 5 */
-    s = add('titleOnly');
-    T.setPlain(ph(s, 'title').tx, 'From lease to first pour');
-    const steps = [['Site & lease', '8 weeks'], ['Build-out', '12 weeks'], ['Hire & train', '4 weeks'], ['Soft open', '2 weeks']];
-    const W = pres.W, bw = W * 0.22, gap = W * 0.01, x0 = (W - (bw * 4 + gap * 3)) / 2, y0 = pres.H * 0.42;
-    steps.forEach(([label, dur], i) => {
-      const sh = M.newShape(pres, s, i === 0 ? 'homePlate' : 'chevron', x0 + i * (bw + gap), y0, bw, pres.H * 0.16);
-      sh.fill = { t: 'grad', stops: [{ p: 0, c: L.color.lighten('#4A7BC8', 0.25), a: 1 }, { p: 1, c: '#2A4E8F', a: 1 }], ang: 90, path: 'lin' };
-      sh.line = { t: 'none', w: 0.75 };
-      sh.tx.ps = [T.para(label, { algn: 'ctr' }, { sz: 15, b: true, color: 'lt1' })];
-      sh.tx.ins = [4, 3.6, 4, 3.6];
+    const add = (layout, title, trans) => {
+      const s = M.newSlide(pres, layout, did);
+      pres.slides.push(s);
+      if (title) T.setPlain(ph(s, 'title').tx, title);
+      s.trans = Object.assign({ type: 'fade', spd: 'med', click: true, after: null }, trans);
+      return s;
+    };
+    const solid = (c, a) => ({ t: 'solid', c, a: a == null ? 1 : a });
+    /** a shape without an outline; o: more of its properties (tx, adj, shadow…) */
+    const shape = (s, geom, x, y, w, h, fill, o) => {
+      const sh = Object.assign(M.newShape(pres, s, geom, x, y, w, h), { fill, line: { t: 'none' } }, o);
       s.shapes.push(sh);
-      const tb = M.newTextBox(pres, s, x0 + i * (bw + gap), y0 + pres.H * 0.18, bw, 30, true);
-      tb.tx.ps = [T.para(dur, { algn: 'ctr' }, { sz: 16, color: 'accent1', i: true })];
+      return sh;
+    };
+    /** a text box that keeps its size */
+    const text = (s, x, y, w, h, ps, o) => {
+      const tb = M.newTextBox(pres, s, x, y, w, h, true);
+      Object.assign(tb.tx, { ps, autofit: 'none', ins: [0, 0, 0, 0] }, o);
       s.shapes.push(tb);
-      s.anims.push({ id: L.uid('a'), sid: sh.id, cls: 'entr', eff: 'wipe', dir: 'l', start: i === 0 ? 'click' : 'after', dur: 500, delay: 0, by: 'all' });
-      s.anims.push({ id: L.uid('a'), sid: tb.id, cls: 'entr', eff: 'fade', start: 'with', dur: 500, delay: 200, by: 'all' });
+      return tb;
+    };
+    const group = (s, name, kids) => {
+      for (const k of kids) s.shapes.splice(s.shapes.indexOf(k), 1);
+      const g = { id: L.uid('s'), type: 'group', name, rot: 0, kids };
+      Object.assign(g, M.groupBounds(g));
+      s.shapes.push(g);
+      return g;
+    };
+    const line = (s, x1, y1, x2, y2, ln) => { const l = M.newLine(pres, s, 'line', [x1, y1], [x2, y2]); l.line = ln; s.shapes.push(l); return l; };
+    const anim = (s, sh, eff, start, o) => s.anims.push(Object.assign({ id: L.uid('a'), sid: sh.id, cls: 'entr', eff, start, dur: 500, delay: 0, by: 'all' }, o));
+
+    /* 1: the title, beside a copper sun setting behind the pines into the harbour */
+    let s = add('title');
+    ph(s, 'ctrTitle').tx.ps = [P('Harbor & Pine Coffee', null, { sz: 48 })];
+    ph(s, 'subTitle').tx.ps = [P('2027 Expansion Plan', null, { sz: 26 }), P('Ten new cafés in four markets', { spcBef: { pts: 6 } }, { sz: 16, color: GREY })];
+    text(s, W * 0.06, H * 0.2, W * 0.48, 22, [P('Board review · October 2026', null, { sz: 13, b: true, color: 'accent2', spc: 2, cap: 'all' })]);
+    text(s, W * 0.06, H * 0.86, W * 0.48, 20, [P('Sample presentation', null, { sz: 12, color: GREY })]);
+    const px = W * 0.606, pw = W - px, cx = px + pw * 0.48, hz = H * 0.62;
+    const sun = shape(s, 'ellipse', cx - 96, hz - 140, 192, 192, { t: 'grad', stops: [{ p: 0, c: '#F2C77F', a: 1 }, { p: 1, c: '#C9803A', a: 1 }], ang: 90, path: 'lin' });
+    sun.name = 'Sun';
+    const water = shape(s, 'rect', px, hz, pw, H - hz, solid('#17322B'));
+    water.name = 'Harbour';
+    const glints = [[150, 0.6], [112, 0.5], [80, 0.42], [52, 0.34], [28, 0.26], [12, 0.2]].map(([w, a], i) => shape(s, 'rect', cx - w / 2, hz + 14 + i * 15, w, 3, solid('#F2C77F', a)));
+    group(s, 'Reflection', glints);
+    const pine = (x, h) => {
+      const w = h * 0.46, top = hz - h, kids = [0, 1, 2].map((i) => shape(s, 'triangle', x - (w * (0.5 + 0.25 * i)) / 2, top + i * h * 0.26, w * (0.5 + 0.25 * i), h * 0.42, solid('#10241E')));
+      kids.push(shape(s, 'rect', x - w * 0.06, hz - h * 0.08, w * 0.12, h * 0.08, solid('#10241E')));
+      return kids;
+    };
+    group(s, 'Pines', [...pine(px + 34, 150), ...pine(px + 72, 104), ...pine(W - 76, 176), ...pine(W - 34, 120)]);
+    s.notes = 'This is a sample deck. Open your own .pptx from File ▸ Open, or start fresh with File ▸ New.';
+
+    /* 2: four figures as cards */
+    s = add('titleOnly', 'Where we stand today', { type: 'push', dir: 'u' });
+    const figs = [['14', 'cafés in three coastal cities', 'Portland, Seattle and Monterey', 'accent1'], ['+11%', 'same-store sales, year over year', 'Mornings are the strongest daypart', 'accent2'],
+      ['22%', 'of revenue from wholesale beans', 'Up from 15% in 2025', 'hlink'], ['64%', 'of the roastery’s capacity in use', 'Room to supply ten more cafés', 'accent6']];
+    const cw = (W * 0.9 - 3 * 18) / 4;
+    figs.forEach(([big, label, note, c], i) => {
+      const x = W * 0.05 + i * (cw + 18);
+      const card = shape(s, 'rect', x, 178, cw, 178, solid('#FFFFFF'), { line: { c: '#E4DBCD', w: 0.75, dash: 'solid' }, name: 'Figure ' + (i + 1) });
+      card.tx = T.body([P(big, { algn: 'l' }, { font: MJ, sz: 48, color: c }), P(label, { algn: 'l', spcBef: { pts: 4 } }, { sz: 17, color: 'tx1' }), P(note, { algn: 'l', spcBef: { pts: 12 } }, { sz: 13, color: GREY })], { anchor: 't', wrap: true, autofit: 'none', ins: [18, 26, 16, 12] });
+      const bar = shape(s, 'rect', x, 178, cw, 5, solid(c));
+      const g = group(s, 'Figure ' + (i + 1), [card, bar]);
+      anim(s, g, 'fade', i ? 'after' : 'click', { dur: 400 });
     });
-    const total = M.newTextBox(pres, s, x0, y0 + pres.H * 0.3, bw * 4 + gap * 3, 30, true);
-    total.tx.ps = [T.para('About 26 weeks from signed lease to opening day', { algn: 'ctr' }, { sz: 18 })];
-    s.shapes.push(total);
-    s.trans = { type: 'fade', spd: 'med', click: true, after: null };
-    /* 6: a SmartArt diagram (js/diagram.js) */
-    s = add('text');
-    T.setPlain(ph(s, 'title').tx, 'How we choose a city');
-    const fn = L.diagram.make(pres, s, ph(s, 'body'), 'funnel', ['40 markets screened', '12 visited', '5 shortlisted', '4 chosen']);
-    s.anims = [{ id: L.uid('a'), sid: fn.id, cls: 'entr', eff: 'fade', start: 'click', dur: 500, delay: 0, by: 'all' }];
-    s.trans = { type: 'fade', spd: 'med', click: true, after: null };
+    text(s, W * 0.05, 390, W * 0.9, 60, [P('Steady growth and a roastery with room to spare: the right moment to expand.', null, { font: MJ, sz: 20, i: true, color: 'tx2' })]);
+    s.notes = 'Lead with momentum: comparable-store growth and a roastery with headroom.';
+
+    /* 3: a chart and what it says */
+    s = add('titleOnly', 'Revenue by region', { type: 'wipe', dir: 'r' });
+    text(s, W * 0.05, 112, W * 0.6, 22, [P('Quarterly revenue in 2026, $ thousands', null, { sz: 14, color: GREY })]);
+    const ser = (i, name, vals, c) => ({ g: 0, idx: i, order: i, name, vals, fill: solid(c), color: M.resolveColor(c, design) });
+    const axis = (o) => Object.assign({ del: false, tick: 'none', lblPos: 'nextTo', crosses: 'autoZero' }, o);
+    const chart = { id: L.uid('s'), type: 'chart', name: 'Revenue chart', x: W * 0.04, y: 140, w: W * 0.6, h: 330, rot: 0, chart: {
+      v: 2, style: 2, kind: 'col', cats: ['Q1', 'Q2', 'Q3', 'Q4'],
+      groups: [{ type: 'bar', dir: 'col', grouping: 'clustered', gap: 80, overlap: -10, vary: false, axIds: ['1', '2'], si: [0, 1, 2] }],
+      series: [ser(0, 'Portland', [410, 455, 520, 560], 'accent1'), ser(1, 'Seattle', [380, 402, 446, 490], 'accent2'), ser(2, 'Monterey', [120, 138, 171, 205], 'accent3')],
+      ax: { c: axis({ kind: 'cat', id: '1', cross: '2', pos: 'b', line: { c: '#CFC4B4', w: 1 }, tx: { sz: 13, color: GREY } }),
+        v: axis({ kind: 'val', id: '2', cross: '1', pos: 'l', between: true, grid: { c: '#E8E0D4', w: 0.75 }, line: { t: 'none' }, tx: { sz: 12, color: GREY } }) },
+      gridY: true, fsz: 12, font: '+mn', textColor: 'tx1', title: '', legend: 't', legendTx: { sz: 13 },
+    } };
+    s.shapes.push(chart);
+    anim(s, chart, 'wipe', 'click', { dir: 'b', dur: 1000 });
+    const said = shape(s, 'rect', W * 0.68, 168, W * 0.27, 250, solid('#F2ECE3'), { name: 'Takeaways' });
+    said.tx = T.body([P('+38%', { algn: 'l' }, { font: MJ, sz: 54, color: 'accent2' }), P('revenue growth from Q1 to Q4', { algn: 'l' }, { sz: 16, color: 'tx1' }),
+      P('Monterey, our newest café, grew fastest: +71% in a year.', { algn: 'l', spcBef: { pts: 22 } }, { sz: 15, color: 'tx1' }),
+      P('Portland is still the largest market, at $560K a quarter.', { algn: 'l', spcBef: { pts: 12 } }, { sz: 15, color: 'tx1' })], { anchor: 't', wrap: true, autofit: 'none', ins: [22, 22, 20, 16] });
+    anim(s, said, 'fade', 'after');
+    s.notes = 'All three regions grew every quarter; Monterey proves the model works in a smaller city.';
+
+    /* 4: a table and its total */
+    s = add('table', 'Where we open next', { type: 'cover', dir: 'l' });
+    const tp = ph(s, 'tbl');
+    const rows = [['Phase', 'Market', 'New cafés', 'Opens'], ['1', 'Tacoma, WA', '2', 'March 2027'], ['2', 'Santa Cruz, CA', '3', 'June 2027'], ['3', 'Bend, OR', '2', 'September 2027'], ['4', 'Boise, ID', '3', 'January 2028']];
+    const t = M.newTable(pres, s, rows.length, 4, tp.x, 150, W * 0.56);
+    t.ph = L.clone(tp.ph);
+    rows.forEach((row, ri) => row.forEach((v, ci) => {
+      const cell = t.tbl.rows[ri].cells[ci];
+      const rp = ri === 0 ? { sz: 15, b: true, color: 'bg1' } : ci === 0 ? { font: MJ, sz: 18, b: true, color: 'accent2' } : { sz: 17, color: 'tx1' };
+      cell.tx.ps = [P(v, { algn: ci === 0 || ci === 2 ? 'ctr' : 'l' }, rp)];
+      cell.tx.anchor = 'ctr';
+      cell.tx.ins = [10, 3.6, 10, 3.6];
+      cell.fill = ri === 0 ? solid('accent1') : ri % 2 ? solid('#FFFFFF') : solid('#F2ECE3');
+      for (const k of ['l', 'r', 't']) cell.bd[k] = { t: 'none' };
+      cell.bd.b = ri === 0 ? { t: 'none' } : { c: '#E4DBCD', w: 1, dash: 'solid' };
+    }));
+    t.tbl.rows.forEach((r) => { r.h = 52; });
+    t.h = 52 * rows.length;
+    t.tbl.cols = [0.15, 0.39, 0.2, 0.26].map((f) => t.w * f);
+    s.shapes.splice(s.shapes.indexOf(tp), 1, t);
+    const ten = text(s, W * 0.68, 160, W * 0.27, 250, [P('10', null, { font: MJ, sz: 88, color: 'accent2' }), P('new cafés by January 2028', null, { sz: 18, color: 'tx1' }),
+      P('Each phase starts only when the one before it pays its way.', { spcBef: { pts: 18 } }, { sz: 15, color: GREY })]);
+    anim(s, ten, 'fade', 'click');
+    s.notes = 'Ten new cafés over five quarters; each phase starts only after the prior one is cash-positive.';
+
+    /* 5: a timeline drawn with shapes */
+    s = add('titleOnly', 'From lease to first pour');
+    const x0 = 290, k = (W * 0.95 - 24 - x0) / 26, y0 = 196, rh = 60;
+    const steps = [['Site & lease', 'Find the corner, sign the lease', 0, 8, 'accent1'], ['Build-out', 'Design, permits and construction', 8, 12, 'accent2'],
+      ['Hire & train', 'Baristas train at a sister café', 20, 4, 'hlink'], ['Soft open', 'Friends and neighbours first', 24, 2, 'accent6']];
+    for (let wk = 0; wk <= 24; wk += 4) {
+      line(s, x0 + wk * k, 178, x0 + wk * k, y0 + rh * 4 - 8, { c: '#E4DBCD', w: 0.75, dash: 'solid' });
+      text(s, x0 + wk * k - 30, 152, 60, 18, [P(wk ? String(wk) : 'Week 0', { algn: 'ctr' }, { sz: 12, color: GREY })]);
+    }
+    steps.forEach(([name, what, from, weeks, c], i) => {
+      const y = y0 + i * rh;
+      text(s, W * 0.05, y + 4, x0 - W * 0.05 - 20, rh - 8, [P(name, null, { font: MJ, sz: 18, color: 'tx2' }), P(what, null, { sz: 12, color: GREY })]);
+      const bar = shape(s, 'roundRect', x0 + from * k, y + 12, weeks * k, 28, solid(c), { adj: { adj: 50000 }, name: name });
+      /* how long, after the bar, or before it where the bar runs up to opening day */
+      const after = from + weeks <= 20;
+      const len = text(s, after ? x0 + (from + weeks) * k + 8 : x0 + from * k - 88, y + 17, 80, 20, [P(weeks + ' weeks', { algn: after ? 'l' : 'r' }, { sz: 13, b: true, color: c })]);
+      anim(s, bar, 'wipe', i ? 'after' : 'click', { dir: 'l' });
+      anim(s, len, 'fade', 'with', { delay: 200 });
+    });
+    const open = x0 + 26 * k;
+    line(s, open, 170, open, y0 + rh * 4, { c: 'accent2', w: 1.5, dash: 'dash' });
+    text(s, open - 70, y0 + rh * 4 + 6, 140, 40, [P('Opening day', { algn: 'ctr' }, { sz: 14, b: true, color: 'accent2' }), P('week 26', { algn: 'ctr' }, { sz: 12, color: GREY })]);
+    s.notes = 'About 26 weeks from signed lease to opening day. Build-out is the long pole; we start hiring before it ends.';
+
+    /* 6: an IntelliArt funnel (js/diagram.js) beside the tests a city has to pass */
+    s = add('titleOnly', 'How we choose a city');
+    const fn = L.diagram.make(pres, s, { x: W * 0.05, y: 140, w: W * 0.42, h: 330 }, 'funnel', ['40 markets screened', '12 visited', '5 shortlisted', '4 chosen'], { colors: 'accent1-range', style: 'flat' });
+    anim(s, fn, 'fade', 'click');
+    const tests = [['Foot traffic', 'At least 4,000 people pass the site on a weekday morning.'], ['Rent', 'Under 9% of the sales we forecast for the site.'], ['Fresh beans', 'Within two hours of the roastery, so beans arrive the day they are roasted.']];
+    tests.forEach(([head, why], i) => {
+      const y = 158 + i * 100;
+      const n = shape(s, 'ellipse', W * 0.53, y, 34, 34, solid('accent2'), { name: 'Test ' + (i + 1) });
+      n.tx = T.body([P(String(i + 1), { algn: 'ctr' }, { font: MJ, sz: 16, b: true, color: 'bg1' })], { anchor: 'ctr', wrap: false, autofit: 'none', ins: [0, 0, 0, 0] });
+      const tb = text(s, W * 0.53 + 50, y + 2, W * 0.42 - 50, 80, [P(head, null, { font: MJ, sz: 20, color: 'tx2' }), P(why, { spcBef: { pts: 4 } }, { sz: 15, color: 'tx1' })]);
+      const g = group(s, head, [n, tb]);
+      anim(s, g, 'fade', 'after');
+    });
     s.notes = 'Each city has to clear foot traffic, rent and a roastery-delivery radius before we visit.';
-    /* 7 */
-    s = add('text');
-    T.setPlain(ph(s, 'title').tx, 'What we need from the board');
-    const b6 = ph(s, 'body');
-    b6.tx.ps = T.fromLines(['Approve the $4.2M capital plan', 'Green-light a second roaster in Q2', 'Name an executive sponsor for Boise']);
-    b6.w = pres.W * 0.62;
-    const call = M.newShape(pres, s, 'wedgeRoundRectCallout', pres.W * 0.7, pres.H * 0.3, pres.W * 0.25, pres.H * 0.2);
-    call.adj = { adj1: -62000, adj2: 48000 };
-    call.fill = { t: 'solid', c: 'accent2', a: 1 };
-    call.line = { c: '#9A6B00', w: 1, dash: 'solid' };
-    call.shadow = { c: '#000000', a: 0.3, dx: 3, dy: 3, blur: 4 };
-    call.tx.ps = [T.para('Decision needed today', { algn: 'ctr' }, { sz: 20, b: true, color: 'dk1' })];
-    s.shapes.push(call);
-    s.anims = [{ id: L.uid('a'), sid: b6.id, cls: 'entr', eff: 'flyIn', dir: 'l', start: 'click', dur: 500, delay: 0, by: 'para' }, { id: L.uid('a'), sid: call.id, cls: 'entr', eff: 'zoom', start: 'after', dur: 500, delay: 250, by: 'all' }, { id: L.uid('a'), sid: call.id, cls: 'emph', eff: 'teeter', start: 'after', dur: 1000, delay: 0, by: 'all' }];
-    s.trans = { type: 'push', dir: 'l', spd: 'med', click: true, after: null };
-    /* 8 */
-    s = add('blank');
-    const wa = { id: L.uid('s'), type: 'wordart', name: 'LettersArt 1', x: pres.W * 0.15, y: pres.H * 0.3, w: pres.W * 0.7, h: pres.H * 0.32, rot: 0, wa: Object.assign(L.clone(L.dlg.WA_STYLES[4]), { text: 'Thank you', font: 'Arial Black', b: true, warp: 'textArchUp', style: 4 }) };
-    s.shapes.push(wa);
-    const q = M.newTextBox(pres, s, pres.W * 0.15, pres.H * 0.66, pres.W * 0.7, 36, true);
-    q.tx.ps = [T.para('Questions? expansion@harborandpine.example', { algn: 'ctr' }, { sz: 20, color: 'tx1' })];
-    s.shapes.push(q);
-    s.anims = [{ id: L.uid('a'), sid: wa.id, cls: 'entr', eff: 'zoom', start: 'after', dur: 750, delay: 0, by: 'all' }];
-    s.trans = { type: 'circle', spd: 'med', click: true, after: null };
+
+    /* 7: the asks, built paragraph by paragraph, and the figure that matters */
+    s = add('text', 'What we need from the board', { type: 'push', dir: 'l' });
+    const b = ph(s, 'body');
+    b.w = W * 0.56;
+    b.tx.ps = T.fromLines([['Approve the $4.2M capital plan', 'Ten cafés over five quarters, from operating cash and a credit line'], ['Green-light a second roaster in Q2', 'Doubles capacity before the third phase opens'], ['Name an executive sponsor for Boise', 'Our first market away from the coast']]
+      .flatMap(([ask, why]) => [{ t: ask, rp: { sz: 24, color: 'tx2' }, pp: { spcBef: { pts: 18 } } }, { t: why, lvl: 1, rp: { sz: 16, color: GREY }, pp: { spcBef: { pts: 4 }, marL: 27, indent: 0, bu: { t: 'none' } } }]));
+    const card = shape(s, 'rect', W * 0.65, 160, W * 0.3, 262, solid('tx2'), { name: 'Capital plan' });
+    card.tx = T.body([P('$4.2M', { algn: 'l' }, { font: MJ, sz: 60, color: 'accent5' }), P('capital plan, 2027–28', { algn: 'l' }, { sz: 18, color: 'bg1' }),
+      P('Paid back in three and a half years', { algn: 'l', spcBef: { pts: 16 } }, { sz: 14, color: 'accent3' })], { anchor: 'b', wrap: true, autofit: 'none', ins: [24, 20, 20, 26] });
+    const pill = shape(s, 'roundRect', W * 0.65 + 24, 184, 190, 32, solid('accent2'), { adj: { adj: 50000 }, name: 'Decision needed today' });
+    pill.tx = T.body([P('Decision needed today', { algn: 'ctr' }, { sz: 14, b: true, color: 'bg1' })], { anchor: 'ctr', wrap: false, autofit: 'none', ins: [8, 0, 8, 0] });
+    s.anims = [{ id: L.uid('a'), sid: b.id, cls: 'entr', eff: 'flyIn', dir: 'l', start: 'click', dur: 500, delay: 0, by: 'para' }];
+    anim(s, card, 'zoom', 'after', { delay: 250 });
+    anim(s, pill, 'zoom', 'with', { delay: 250 });
+    s.anims.push({ id: L.uid('a'), sid: pill.id, cls: 'emph', eff: 'teeter', start: 'after', dur: 1000, delay: 0, by: 'all' });
+
+    /* 8: thanks, on the pine of the title slide */
+    s = add('blank', null, { type: 'circle' });
+    s.bg = solid('tx2');
+    s.hideMaster = true;
+    const thanks = text(s, W * 0.1, H * 0.3, W * 0.8, 90, [P('Thank you', { algn: 'ctr' }, { font: MJ, sz: 66, color: 'bg1' })], { anchor: 'b' });
+    shape(s, 'rect', W / 2 - 24, H * 0.5, 48, 4, solid('accent2'), { name: 'Rule' });
+    text(s, W * 0.1, H * 0.55, W * 0.8, 30, [P('Questions? expansion@harborandpine.example', { algn: 'ctr' }, { sz: 20, color: 'accent5' })]);
+    anim(s, thanks, 'zoom', 'after', { dur: 750 });
     pres.hf = Object.assign(pres.hf, { num: true, notOnTitle: true });
     return pres;
   }

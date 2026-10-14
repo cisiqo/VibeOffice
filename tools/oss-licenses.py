@@ -2,15 +2,19 @@
 """Writes public/oss-licenses.html: the licenses of the open source works this repository is made with, as a
 browser's credits page (About ▸ Open source licenses in the Start Center and every app).
 
-  python3 tools/oss-licenses.py
+  python3 tools/oss-licenses.py            write the page
+  python3 tools/oss-licenses.py --check    only check: the page lists the crates that ship, none needs copyleft
 
 The site: VibeOffice itself (LICENSE), the fonts (public/fonts/LICENSES.txt), the proofing lists
-(public/common/dict/LICENSES.txt) and the ECMA-376 data in public/common/opc-order.js; their license files are
-read by the page when an entry is opened. The desktop app: the crates desktop/Cargo.toml depends on directly
-(not their own dependencies, nor build-only ones), on Windows (x86_64-pc-windows-gnu) or Linux
-(x86_64-unknown-linux-gnu), with the license files from the crate's package (cargo metadata; the sources must be
-downloaded, as after a build), and the DLLs that ship beside the exe (desktop/licenses/). Identical texts are kept
-once. Run it again after changing a dependency. Standard library only."""
+(public/common/dict/LICENSES.txt), the ECMA-376 data in public/common/opc-order.js, and the code and data derived from
+other projects (public/common/licenses/; each file says "Derived from <name> …"); their license files are read by the
+page when an entry is opened, or kept in it. The desktop app: every crate compiled into the app and its installer
+(the workspace's members and their normal dependencies, all the way down; not what only build scripts or procedural
+macros use), on Windows (x86_64-pc-windows-gnu) or Linux (x86_64-unknown-linux-gnu), with the license files from the
+crate's package (cargo metadata; the sources must be downloaded, as after a build), and the DLLs that ship beside the
+exe (desktop/licenses/; a crate whose package has no license file has the one from its repository in
+desktop/licenses/crates/). A shipped crate whose licence needs copyleft stops it. Identical texts are kept once. Run it
+again after changing a dependency. Standard library only."""
 import hashlib, html, json, os, re, subprocess, sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -21,15 +25,56 @@ LICENSE_FILE = re.compile(r'^(licen[cs]e|copying|copyright|notice|unlicense)', r
 E = html.escape
 
 
-def direct_crates(target):
-    """{package id: package} of the crates the app depends on directly for a target (normal dependencies)"""
-    out = subprocess.run(['cargo', 'metadata', '--format-version', '1', '--locked', '--filter-platform', target],
-                         cwd=os.path.join(ROOT, 'desktop'), capture_output=True, text=True, check=True).stdout
-    meta = json.loads(out)
-    packages = {p['id']: p for p in meta['packages']}
-    nodes = {n['id']: n for n in meta['resolve']['nodes']}
-    root = meta['resolve']['root']
-    return {d['pkg']: packages[d['pkg']] for d in nodes[root]['deps'] if any(k['kind'] is None for k in d['dep_kinds'])}
+def shipped_crates(target):
+    """{package id: package} of every crate compiled into what ships for a target: the workspace's members (the app
+    and its installer) and, along normal dependencies, what they link, with features resolved as the build resolves
+    them (cargo tree; cargo metadata's graph also holds what only Tauri's build-time macros use). Our own path crates
+    (desktop/patches/) are left out."""
+    run = lambda *a: subprocess.run(['cargo', *a, '--locked'], cwd=os.path.join(ROOT, 'desktop'), capture_output=True, text=True, check=True).stdout
+    tree = run('tree', '--target', target, '--workspace', '-e', 'normal,no-proc-macro', '--prefix', 'none', '--format', '{p}')
+    shipped = {(m[1], m[2]) for m in re.finditer(r'^(\S+) v(\S+)(?! \((?:/|[A-Za-z]:\\))', tree, re.M)}
+    meta = json.loads(run('metadata', '--format-version', '1', '--filter-platform', target))
+    return {p['id']: p for p in meta['packages'] if p.get('source') and (p['name'], p['version']) in shipped}
+
+
+COPYLEFT = re.compile(r'(MPL|GPL|EUPL|CDDL|EPL|OSL|CC-BY-SA)', re.I)
+
+
+def without_copyleft(expr):
+    """whether an SPDX licence expression can be met without a copyleft licence: one side of an OR is enough, every
+    side of an AND is needed ("MIT OR Apache-2.0 OR LGPL-2.1-or-later" can; "MPL-2.0" can't)"""
+    tokens = re.findall(r'\(|\)|[^\s()]+', expr.replace('/', ' OR '))
+    pos = 0
+
+    def alternatives():
+        nonlocal pos
+        ok = all_of()
+        while pos < len(tokens) and tokens[pos].upper() == 'OR':
+            pos += 1
+            ok = all_of() or ok
+        return ok
+
+    def all_of():
+        nonlocal pos
+        ok = one()
+        while pos < len(tokens) and tokens[pos].upper() == 'AND':
+            pos += 1
+            ok = one() and ok
+        return ok
+
+    def one():
+        nonlocal pos
+        tok = tokens[pos]
+        pos += 1
+        if tok == '(':
+            ok = alternatives()
+            pos += 1   # ')'
+            return ok
+        if pos < len(tokens) and tokens[pos].upper() == 'WITH':
+            pos += 2   # an exception only widens the licence
+        return not COPYLEFT.search(tok)
+
+    return bool(tokens) and alternatives()
 
 
 def license_texts(package):
@@ -42,6 +87,10 @@ def license_texts(package):
             names.append(path)
         elif os.path.isdir(path) and name.upper() == 'LICENSES':
             names += [os.path.join(path, n) for n in sorted(os.listdir(path)) if os.path.isfile(os.path.join(path, n))]
+    if not names:   # none in the package: the one from its repository, kept in desktop/licenses/crates/
+        kept = os.path.join(ROOT, 'desktop', 'licenses', 'crates', package['name'] + '.txt')
+        if os.path.isfile(kept):
+            names.append(kept)
     out = []
     for path in names:
         with open(path, encoding='utf-8', errors='replace') as f:
@@ -59,7 +108,7 @@ def main():
 
     crates = {}   # (name, version) -> entry
     for platform, target in TARGETS.items():
-        for package in direct_crates(target).values():
+        for package in shipped_crates(target).values():
             key = (package['name'], package['version'])
             if key not in crates:
                 files = license_texts(package)
@@ -75,19 +124,45 @@ def main():
     with open(os.path.join(ROOT, 'desktop', 'licenses', 'WebView2Loader.txt'), encoding='utf-8') as f:
         webview2 = keep(f.read().strip())
 
-    def work(name, lic, links, what, files='', texts_=(), src=''):
+    def notice(name):
+        with open(os.path.join(ROOT, 'public', 'common', 'licenses', name), encoding='utf-8') as f:
+            return keep(f'{name}\n\n{f.read().strip()}')
+
+    def work(name, lic, links, what, files='', texts_=(), src='', derived=False):
         head = f'<b>{E(name)}</b><span class="lic">{E(lic)}</span>' + ''.join(f'<a href="{E(u)}">{E(t)}</a>' for t, u in links)
         body = f'<p class="what">{what}</p>' if what else ''
         body += f'<p class="files">{E(files)}</p>' if files else ''
         if texts_ or src:
             attrs = f' data-texts="{" ".join(texts_)}"' if texts_ else f' data-src="{E(src)}"'
             body += f'<details{attrs}><summary>Show license</summary><pre></pre></details>'
-        return f'<section class="work"><div class="head">{head}</div>{body}</section>\n'
+        return f'<section class="work{" derived" if derived else ""}"><div class="head">{head}</div>{body}</section>\n'
 
     site = ''.join([
         work('VibeOffice.work', 'Apache License 2.0', [('github.com/tcchen2026/VibeOffice', 'https://github.com/tcchen2026/VibeOffice')],
-             'Quire, Ledger, Lectern, the Start Center and everything they share, including the PDF writer, ZIP engine, metafile player, icons and clip art; and the desktop app around them.',
+             'Quire, Ledger, Lectern, the Start Center and everything they share, including the PDF writer, ZIP engine, metafile player, icons and clip art; and the desktop app around them. The parts that come from the projects below say so in their files.',
              texts_=[apache]),
+        # code and data derived from other projects: each file says "Derived from <name> …" (tests/licenses.test.mjs)
+        work('Apache OpenOffice', 'Apache License 2.0', [('openoffice.org', 'https://www.openoffice.org'), ('github.com/apache/openoffice', 'https://github.com/apache/openoffice')],
+             'Rewritten in JavaScript from its spreadsheet code: the depreciation and interest functions DDB, IPMT, AMORLINC and AMORDEGRC, and the scroll bars\' range. Its English AutoCorrect list is the base of the default list.',
+             files='public/ledger/js/fn-fin.js, public/ledger/js/grid.js, public/common/spell.js', texts_=[apache, notice('apache-openoffice-NOTICE.txt')], derived=True),
+        work('commonmark.js', 'BSD-2-Clause', [('github.com/commonmark/commonmark.js', 'https://github.com/commonmark/commonmark.js')],
+             'Quire\'s Markdown reader is a condensed translation of its block and inline parsers. Copyright (c) 2014 John MacFarlane.',
+             files='public/quire/js/markdown.js', texts_=[notice('commonmark.js-LICENSE.txt')], derived=True),
+        work('puff', 'zlib License', [('github.com/madler/zlib', 'https://github.com/madler/zlib/tree/develop/contrib/puff')],
+             'The ZIP engine\'s JavaScript inflater, used where the browser can\'t decompress, is an altered translation of puff.c. Copyright (C) 2002-2013 Mark Adler.',
+             files='public/common/zip.js', texts_=[notice('puff-LICENSE.txt')], derived=True),
+        work('SheetJS SSF', 'Apache License 2.0', [('github.com/SheetJS/ssf', 'https://github.com/SheetJS/ssf')],
+             'Two helpers of the General number format, for trailing zeros and exponents. Copyright (C) 2013-present SheetJS LLC.',
+             files='public/common/numfmt.js', texts_=[apache, notice('sheetjs-ssf-NOTICE.txt')], derived=True),
+        work('Microsoft VBA documentation', 'CC BY 4.0', [('github.com/MicrosoftDocs/VBA-Docs', 'https://github.com/MicrosoftDocs/VBA-Docs')],
+             'Ledger\'s function descriptions and argument help follow the Excel WorksheetFunction pages of this documentation, in places shortened or adapted to Ledger. Copyright (c) Microsoft Corporation.',
+             files='public/ledger/js/fninfo.js', texts_=[notice('microsoft-vba-docs-LICENSE.txt')], derived=True),
+        work('Open XML SDK', 'MIT License', [('github.com/dotnet/Open-XML-SDK', 'https://github.com/dotnet/Open-XML-SDK')],
+             'From its schema data (commit 431ab05), the order of Word\'s run properties with their Office 2010 effects, and the limits of Word\'s revision and numbering IDs, in the generated element order. Copyright (c) .NET Foundation and Contributors.',
+             files='public/common/opc-order.js', texts_=[notice('openxml-sdk-LICENSE.txt')], derived=True),
+        work("Peter Norvig's spelling corrector", 'MIT License', [('norvig.com/spell-correct.html', 'https://norvig.com/spell-correct.html')],
+             'The spelling checker\'s one-edit candidates (edits1), in JavaScript. Copyright (c) 2007-2016 Peter Norvig.',
+             files='public/common/spell.js', texts_=[notice('norvig-spell-LICENSE.txt')], derived=True),
         work('Carlito, Caladea and Gelasio fonts', 'SIL Open Font License 1.1', [('github.com/google/fonts', 'https://github.com/google/fonts')],
              'Metric-compatible stand-ins for Calibri, Cambria and Georgia, for computers that do not have them. Copyright 2013 The Carlito Project Authors; 2012 The Caladea Project Authors; 2022 The Gelasio Project Authors.',
              files='public/fonts/*.woff2', src='fonts/LICENSES.txt'),
@@ -99,6 +174,19 @@ def main():
              'The order of elements in each part of a file, and the shape presets\' adjustment values, generated from the schemas and preset definitions of ECMA-376 Office Open XML File Formats, fifth edition (Parts 1 and 4).',
              files='public/common/opc-order.js'),
     ])
+
+    copyleft = sorted(f"{c['name']} {c['version']} ({c['license'] or 'no licence'})" for c in crates.values() if not without_copyleft(c['license']))
+    if copyleft:
+        sys.exit('Shipped crates whose licence needs copyleft (AGENTS.md, Code from other projects): ' + ', '.join(copyleft))
+    if '--check' in sys.argv:
+        with open(OUT, encoding='utf-8') as f:
+            listed = set(re.findall(r'<b>([^<]+ \d[^<]*)</b>', f.read()))
+        wanted = {f"{c['name']} {c['version']}" for c in crates.values()}
+        missing, extra = sorted(wanted - listed), sorted(listed - wanted)
+        if missing or extra:
+            sys.exit(f'{os.path.relpath(OUT, ROOT)} is out of date (python3 tools/oss-licenses.py): missing {missing}, not shipped {extra}')
+        print(f'{os.path.relpath(OUT, ROOT)}: lists the {len(wanted)} shipped crates; none needs a copyleft licence')
+        return
 
     names = {'windows': 'Windows', 'linux': 'Linux'}
     desktop = work('WebView2Loader.dll', 'BSD-3-Clause (Microsoft WebView2 SDK)', [('aka.ms/webview2', 'https://aka.ms/webview2')],
@@ -162,7 +250,7 @@ TEMPLATE = '''<!DOCTYPE html>
   <p class="intro">The files of the web pages: the apps, the Start Center and what they share.</p>
 {{SITE}}
   <h2>The desktop app</h2>
-  <p class="intro">VibeOffice for Windows and Linux, around the same pages: the Rust crates it is built on (Tauri and the others it uses directly, each with its own dependencies) and the DLLs that ship with it.</p>
+  <p class="intro">VibeOffice for Windows and Linux, around the same pages: every Rust crate compiled into the app and its installer (Tauri and everything it brings, not the tools that only run while building) and the DLLs that ship with it.</p>
 {{DESKTOP}}
 </main>
 <script type="application/json" id="texts">{{TEXTS}}</script>

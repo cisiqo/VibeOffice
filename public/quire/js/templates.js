@@ -256,8 +256,9 @@
     const d = T.build(id);
     L.app.newDocument({ build: (nd) => Object.assign(nd, d) });
   };
-  /* clicking a MACROBUTTON placeholder selects the whole field so typing replaces it */
-  L.bus.on('sel', () => {
+  /* a click on a MACROBUTTON placeholder (or the caret moved into it) selects the whole field, so typing replaces it;
+     after the mouse is let go: selecting it while the button is down makes the drag that follows move it */
+  const selectPlaceholder = () => {
     const E = L.ed;
     if (!E.sel || !E.collapsed() || !L.fields || T.busy) return;
     const f = L.fields.at(E.sel.f);
@@ -269,5 +270,7 @@
     T.busy = true;
     E.setSel(D.pos(g.begin.p, g.begin.o), D.pos(g.end.p, g.end.o), { noScroll: true });
     T.busy = false;
-  });
+  };
+  L.bus.on('sel', () => { if (!L.ed.pressing()) selectPlaceholder(); });
+  L.bus.on('sel-done', selectPlaceholder);
 })();

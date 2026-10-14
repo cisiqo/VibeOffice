@@ -10,3 +10,5 @@ node_modules
 /desktop/gen
 !/desktop/.cargo
 !/.github
+/refs
+/todos

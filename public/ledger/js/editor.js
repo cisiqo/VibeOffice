@@ -30,7 +30,9 @@
     L.$('#fb-enter').innerHTML = '<svg width="13" height="13" viewBox="0 0 13 13"><path d="M1.5 7l3.5 3.5L11.5 2.5" fill="none" stroke="#1b8a2a" stroke-width="2.2"/></svg>';
     L.$('#fb-fx').innerHTML = '<svg width="18" height="14" viewBox="0 0 18 14"><text x="1" y="11" font-family="Times New Roman,Tinos,serif" font-style="italic" font-size="13" fill="#1a3f8a">f</text><text x="6" y="11" font-family="Times New Roman,Tinos,serif" font-style="italic" font-size="11" fill="#1a3f8a">x</text></svg>';
     L.$('#fb-fx').addEventListener('pointerdown', (e) => { e.preventDefault(); L.ui.exec('insertFunction'); });
-    cell.addEventListener('pointerdown', (e) => { if (E.active) e.stopPropagation(); });
+    /* the cell and the bar are two views of one edit: the one with the keyboard is what the edit reads (it copies to the other) */
+    cell.addEventListener('pointerdown', (e) => { if (E.active) { e.stopPropagation(); surface = cell; } });
+    cell.addEventListener('focus', () => { if (E.active) surface = cell; });
     cell.addEventListener('blur', () => {
       /* clicking elsewhere in the page (not the grid or formula bar) keeps editing alive; menus commit first */
     });
@@ -95,7 +97,21 @@
   };
 
   /* ------------------------------------------------------------ begin / end */
-  E.canPoint = () => E.active && E.mode === 'point';
+  /** can a click on a cell put a reference into the formula? In Point mode, and in Edit mode (F2, a double-click,
+      the formula bar) where the formula expects an operand at the caret, or right after a reference a click put
+      there (the next click replaces it), as Excel. Arrow keys point only in Point mode; in Edit mode they move the
+      caret. */
+  E.canPoint = () => E.active && (E.mode === 'point' || (E.mode === 'edit' && (atPoint() || operandAt())));
+  const atPoint = () => !!point && surface.selectionStart === surface.selectionEnd && surface.selectionStart === point.start + point.len;
+  /** does the formula expect an operand at the caret (after =, an operator, a comma or an opening bracket)? */
+  function operandAt() {
+    const t = surface.value;
+    if (!/^[=+-]/.test(t)) return false;
+    const pos = surface.selectionStart;
+    if (pos !== surface.selectionEnd) return false;
+    const before = t.slice(0, pos);
+    return /(^[=+\-]|[=+\-*/^&(,;<>:%\s])$/.test(before) && !/"[^"]*$/.test(before.replace(/"[^"]*"/g, ''));
+  }
   /**
    * Start editing the active cell. mode: 'enter' (typing replaces) | 'edit' (F2 / double-click)
    */
@@ -135,12 +151,8 @@
   };
   /** after typing in Enter mode, are we pointing (formula expecting an operand)? */
   E.pointableAfterInput = function () {
-    const t = surface.value;
-    if (!/^[=+-]/.test(t)) return 'enter';
-    const pos = surface.selectionStart;
-    if (pos !== surface.selectionEnd) return E.mode === 'edit' ? 'edit' : 'enter';
-    const before = t.slice(0, pos);
-    if (/(^[=+\-]|[=+\-*/^&(,;<>:%\s])$/.test(before) && !/"[^"]*$/.test(before.replace(/"[^"]*"/g, ''))) return 'point';
+    if (!/^[=+-]/.test(surface.value)) return 'enter';
+    if (operandAt()) return 'point';
     return E.mode === 'edit' ? 'edit' : 'enter';
   };
   /** typed-text styling of the in-cell box */
@@ -229,7 +241,7 @@
     const g = G();
     hideAux();
     const unchanged = text === orig && !opts.array && !opts.fill && !E.wasArray;
-    if (unchanged || (text === orig && E.wasArray && !opts.array)) { end(); return true; }
+    if (unchanged || (text === orig && E.wasArray && !opts.array)) { end(opts); return true; }
     if (L.autocorrect && L.autocorrect.applyCell && !/^[=+\-@']/.test(text)) { const t2 = L.autocorrect.applyCell(text); if (t2 !== text) { text = t2; setText(t2); } }
     /* formula autocorrect proposals and errors */
     if (/^[=]/.test(text) || (/^[+-]/.test(text) && O.parseInput(sh.wb, text).kind === 'formula')) {
@@ -243,7 +255,7 @@
           });
           return false;
         }
-        L.ui.msg('The formula you typed contains an error.\n\n• For information about fixing common formula problems, click Help.\n• To get assistance in entering a function, click OK, and then click Function on the Insert menu.\n• If you are not trying to enter a formula, avoid using an equal sign (=) or minus sign (-), or precede it with a single quotation mark (\').', { icon: 'warn', width: 440 }).then(() => {
+        L.ui.msg('The formula you typed contains an error.\n\n• To get assistance in entering a function, click OK, and then click Function on the Insert menu.\n• If you are not trying to enter a formula, avoid using an equal sign (=) or minus sign (-), or precede it with a single quotation mark (\').', { icon: 'warn', width: 440 }).then(() => {
           surface.focus();
           if (chk.pos != null) { const p = Math.min(surface.value.length, chk.pos + 1); try { surface.setSelectionRange(p, p); } catch (e) { /* ignore */ } }
         });
@@ -295,7 +307,7 @@
       L.app.error(e);
       return false;
     }
-    end();
+    end(opts);
     L.app.afterEntry(r, c, text);
     return true;
   };
@@ -322,12 +334,16 @@
       sh.wb.undo.op(() => { sh.cols[c] = before ? Object.assign({}, before) : undefined; LY.invalidate(sh); }, () => { sh.cols[c] = Object.assign({}, after); LY.invalidate(sh); });
     }
   }
-  E.cancel = function () {
+  E.cancel = function (opts) {
     if (!E.active) return;
     hideAux();
-    end();
+    end(opts);
   };
-  function end() {
+  /** the one way out of an edit, after commit or cancel: the editor goes, the formula's own sheet comes back (it may
+      have pointed at another), and the keyboard goes back to the sheet unless opts.keepFocus (the Name Box, which is
+      taking it) */
+  function end(opts) {
+    const back = E.sheet && G().sheet() !== E.sheet ? G().wb.sheets.indexOf(E.sheet) : -1;
     E.active = false;
     E.mode = 'ready';
     point = null;
@@ -339,12 +355,14 @@
     fbwrap.classList.remove('editing');
     fbar.classList.remove('multi');
     G().state.hl = null;
+    if (back >= 0) L.app.activateSheet(back);
     E.show();
     G().paint();
-    G().focus();
+    if (!opts || !opts.keepFocus) G().focus();
     L.bus.emit('mode');
   }
-  function hideAux() { if (acList) { acList.remove(); acList = null; } if (tipEl) { tipEl.remove(); tipEl = null; } }
+  let acOff = null;   // removes the pick list's outside-press listener
+  function hideAux() { if (acOff) { acOff(); acOff = null; } if (acList) { acList.remove(); acList = null; } if (tipEl) { tipEl.remove(); tipEl = null; } }
 
   /* ------------------------------------------------------------ keys */
   E.key = function (e) {
@@ -419,14 +437,30 @@
     L.bus.emit('mode');
   }
   /* mouse pointing (grid calls these) */
-  E.pointStart = function (rg, add) {
-    if (!point || add) point = { start: surface.selectionStart, len: 0 };
+  let pointBefore = null;   // the text, caret and reference before a pointing press, for a cancelled drag
+  /** a press on a cell while pointing: the reference to rg replaces the one just put in (add, Ctrl: one more after a
+      comma; extend, Shift: a range from the reference before to rg). Returns the cell a drag stretches the reference
+      from. */
+  E.pointStart = function (rg, add, extend) {
+    pointBefore = { text: surface.value, caret: surface.selectionStart, point: point && Object.assign({}, point), mode: E.mode };
+    const from = extend && atPoint() && point.cur && point.sheet === G().sheet() ? point.cur : null;
+    if (!atPoint() || add) point = { start: surface.selectionStart, len: 0 };
     if (add && !/[,(=]$/.test(surface.value.slice(0, surface.selectionStart))) { E.insertText(','); point = { start: surface.selectionStart, len: 0 }; }
+    point.sheet = G().sheet();
+    if (from) { putRef({ r1: Math.min(from.r, rg.r1), c1: Math.min(from.c, rg.c1), r2: Math.max(from.r, rg.r2), c2: Math.max(from.c, rg.c2) }); return { r1: from.r, c1: from.c, r2: from.r, c2: from.c }; }
     point.cur = { r: rg.r1, c: rg.c1 }; point.ext = null;
     putRef(rg);
+    return rg;
   };
   E.pointMove = function (rg) { if (point) putRef(rg); };
-  E.pointEnd = function () { surface.focus(); };
+  E.pointEnd = function () { pointBefore = null; surface.focus(); };
+  /** a pointing drag cancelled (Esc, a second button, a lost release): the formula as it was before the press */
+  E.pointCancel = function () {
+    const b = pointBefore;
+    pointBefore = null;
+    if (b && E.active) { point = b.point; setText(b.text, b.caret); E.mode = b.mode; L.bus.emit('mode'); }
+    if (E.active) surface.focus();
+  };
   /** the user switched sheets while pointing: references gain the sheet name */
   E.sheetChanged = function () { if (E.active) { E.place(); E.highlight(); } };
 
@@ -564,11 +598,19 @@
     acList._items = items; acList._sel = null; acList._pick = onPick;
     Object.assign(acList.style, { left: q.x + 'px', top: (q.y + q.h) + 'px', minWidth: Math.max(q.w, 80) + 'px' });
     L.$('#gridwrap').appendChild(acList);
-    const close = (e) => { if (acList && !acList.contains(e.target)) { hideAux(); document.removeEventListener('pointerdown', close, true); } };
-    setTimeout(() => document.addEventListener('pointerdown', close, true), 0);
-    E.listOpen = true;
+    const list = acList;
+    const close = (e) => { if (acList === list && !list.contains(e.target)) hideAux(); };
+    const timer = setTimeout(() => document.addEventListener('pointerdown', close, true), 0);
+    acOff = () => { clearTimeout(timer); document.removeEventListener('pointerdown', close, true); };
   };
-  E.listKey = function (e) { if (!acList) return false; acKey(e); return true; };
+  /** a key while the Alt+Down list is open (not editing): the arrows, Enter and Esc work the list; any other key
+      closes it and goes on to the sheet */
+  E.listKey = function (e) {
+    if (!acList || E.active) return false;
+    if (/^(ArrowUp|ArrowDown|Enter|Escape)$/.test(e.key) && !e.altKey && !e.ctrlKey && !e.metaKey) { acKey(e); return true; }
+    if (!/^(Shift|Control|Alt|Meta)$/.test(e.key)) hideAux();
+    return false;
+  };
   function acKey(e) {
     e.preventDefault();
     const n = acList._items.length;

@@ -15,6 +15,7 @@
     beforeExec() { if (L.ed && L.ed.syncSel && !L.ed.objSel) L.ed.syncSel(); },
     refocus() { if (L.ed) L.ed.refocus(); },
     commitEdit() { if (L.ed && L.ed.textSave) L.ed.textSave(); },
+    ownsText: (el) => !!(L.layout && L.layout.root && L.layout.root.contains(el)),
   };
 
   const DEFAULT_OPTS = {
@@ -121,16 +122,26 @@
         const cells = h('div', { class: 'tgp-cells' });
         const lbl = h('div', { class: 'tgp-label', text: 'Cancel' });
         let cur = [0, 0];
+        // the cells stay put while the grid grows (a cell replaced under the pointer between press and release
+        // gets no click, so the table was never inserted)
         const draw = () => {
           cells.style.gridTemplateColumns = `repeat(${C}, 18px)`;
-          L.clear(cells);
+          const have = new Map([...cells.children].map((s) => [s.dataset.ij, s]));
+          let next = cells.firstChild;
           for (let i = 0; i < R; i++) for (let j = 0; j < C; j++) {
-            const s = h('span', { class: i < cur[0] && j < cur[1] ? 'on' : '' });
-            s.addEventListener('pointerenter', () => { cur = [i + 1, j + 1]; if (i + 2 > R && R < 12) R++; if (j + 2 > C && C < 10) C++; draw(); lbl.textContent = `${cur[0]} x ${cur[1]} Table`; });
-            s.addEventListener('click', () => { close(); L.tables.insert(cur[0], cur[1]); });
-            cells.appendChild(s);
+            let s = have.get(i + ',' + j);
+            if (s) next = s.nextSibling; else cells.insertBefore(s = h('span', { 'data-ij': i + ',' + j }), next);
+            s.classList.toggle('on', i < cur[0] && j < cur[1]);
           }
         };
+        cells.addEventListener('pointerover', (e) => {
+          const s = e.target.closest('span[data-ij]');
+          if (!s) return;
+          const [i, j] = s.dataset.ij.split(',').map(Number);
+          cur = [i + 1, j + 1]; if (i + 2 > R && R < 12) R++; if (j + 2 > C && C < 10) C++;
+          draw(); lbl.textContent = `${cur[0]} x ${cur[1]} Table`;
+        });
+        cells.addEventListener('click', () => { if (cur[0]) { close(); L.tables.insert(cur[0], cur[1]); } });
         draw();
         box.append(cells, lbl);
         return box;
@@ -528,6 +539,7 @@
 
   /* ================= views ================= */
   A.setView = function (v) {
+    ui.dragCancel();   /* a view switch ends a drag in progress */
     const app = L.$('#app');
     if (A.view === 'preview' && v !== 'preview' && L.panes && L.panes.preview) L.panes.preview.exit();
     if (A.view === 'reading' && v !== 'reading') { app.classList.remove('reading'); LY.setMultiPage(0); }
@@ -633,6 +645,7 @@
   const pristine = () => !!D.doc && !D.doc.dirty && !A.saved && !D.canUndo() && /^Document\d+$/.test(A.fileName);
   A.switchTo = function (i) {
     if (i === A.cur || !A.docs[i]) return;
+    ui.dragCancel();
     stash();
     const w = A.docs[i];
     A.cur = i;
@@ -653,6 +666,7 @@
   A.windowItems = () => A.docs.map((w, i) => ({ label: `&${i + 1} ${(i === A.cur ? A.fileName : w.fileName).replace(/&/g, '&&')}`, checked: () => i === A.cur, run: () => A.switchTo(i) }));
   A.loadDoc = function (d, name, opts) {
     opts = opts || {};
+    ui.dragCancel();
     if (opts.newWindow || A.cur < 0) { stash(); A.docs.push(null); A.cur = A.docs.length - 1; }
     if (LY.hfEdit) { LY.hfEdit = null; LY.root.classList.remove('hfmode'); }
     E.clearObjSel();
@@ -848,12 +862,13 @@
   };
 
   /* ---------- PDF (print) ---------- */
+  /** the document's own rules (`.p …`, `table.tbl …`), for the page pictures of PDF export */
   function docCSS() {
     let css = '';
     for (const sheet of document.styleSheets) {
       let rules;
       try { rules = sheet.cssRules; } catch (e) { continue; }
-      for (const r of rules) if (r.selectorText && /(^|[\s,])\.(pg|p|pc|lbl|tb|img|shp|tbl|cf|nref|fdyn|ffcb|crop|pg-|frm|flt|anc|sym|raw|zw|fnsep|fnote|hbrk|sectmark|cmk|cmr|ins|del|hid|lnk|sgrp|tbx|geo|wa|chart)/.test(r.selectorText)) css += r.cssText + '\n';
+      for (const r of rules) if (r.selectorText && /(^|[\s,>]|\b(?:table|td))\.(pg|p|pc|lbl|tb|img|shp|tbl|cf|nref|fdyn|ffcb|crop|pg-|frm|flt|anc|sym|raw|zw|fnsep|fnote|hbrk|sectmark|cmk|cmr|ins|del|hid|lnk|sgrp|tbx|geo|wa|chart)/.test(r.selectorText)) css += r.cssText + '\n';
     }
     return css + '.crop{display:none}.pg-hdr,.pg-ftr{opacity:1!important}.cmk,.cmr{background:none!important}td.csel{background-image:none!important}.p.chg::before{display:none}';
   }
@@ -906,8 +921,17 @@
   };
 
   /* ================= headers & footers ================= */
-  A.editHeaderFooter = function (kind, pageIdx) {
+  /** the caret at a point of the page, when that point is in story (or, without a story, in the body) */
+  const caretAt = (ev, story) => {
+    const pos = ev && E.posAtPoint(ev.clientX, ev.clientY);
+    return pos && D.storyOf(doc(), pos.p) === (story || doc().main) ? pos : null;
+  };
+  /** open the header or footer of kind on page pageIdx (the caret's page); ev, the double-click that opened it:
+      the view stays, and the caret goes where it was double-clicked. The body's selection is kept for the way back. */
+  A.editHeaderFooter = function (kind, pageIdx, ev) {
     if (A.view !== 'print') A.setView('print');
+    if (!LY.hfEdit && E.sel && D.storyOf(doc(), E.sel.f.p) === doc().main) hfReturn = { a: E.sel.a, f: E.sel.f };
+    const top = LY.scroller.scrollTop;
     const pg = LY.pages[pageIdx == null ? Math.max(0, LY.pageOf(E.sel.f)) : pageIdx] || LY.pages[0];
     const d = doc();
     const secs = D.sections(d);
@@ -936,8 +960,10 @@
     LY.render();
     labelHF();
     D.reindex(d);
+    if (ev) LY.scroller.scrollTop = top;
     const p = story && story.paras && story.paras[0] ? story.paras[0] : story && D.firstPara(story.blocks);
-    if (p) E.setSel(D.pos(p, 0));
+    const at = caretAt(ev, story);
+    if (at) E.setSel(at); else if (p) E.setSel(D.pos(p, 0));
     A.updateToolbars();
     ui.refresh();
   };
@@ -955,21 +981,38 @@
     }
   }
   L.bus.on('layout-done', () => { if (LY.hfEdit) labelHF(); });
-  A.closeHeaderFooter = function (silent) {
+  /** back to the body: the caret where ev (a double-click on the body) was, else where it was before the header */
+  let hfReturn = null;
+  A.closeHeaderFooter = function (silent, ev) {
     LY.hfEdit = null;
     LY.root.classList.remove('hfmode');
     if (!silent) {
+      const top = LY.scroller.scrollTop;
       LY.render();
-      const p = D.firstPara(doc().main.blocks);
-      const pg = LY.pages[0];
-      void pg;
-      E.setSel(D.pos(p, 0));
+      LY.scroller.scrollTop = top;
+      const back = hfReturn && D.byId(doc(), hfReturn.a.p.id) === hfReturn.a.p && D.byId(doc(), hfReturn.f.p.id) === hfReturn.f.p ? hfReturn : null;
+      const at = caretAt(ev);
+      if (at) E.setSel(at);
+      else if (back) E.setSel(back.a, back.f);
+      else E.setSel(D.pos(D.firstPara(doc().main.blocks), 0));
     }
+    hfReturn = null;
     A.updateToolbars();
   };
 
   /* ================= misc helpers used by commands ================= */
-  A.gotoPos = function (pos, sel2) {
+  /** select pos (to sel2) and show it; opts.focus false: a modeless dialog (Find and Replace) keeps the keyboard */
+  A.gotoPos = function (pos, sel2, opts) {
+    E.clearObjSel();   /* the text found or gone to is the selection now, not a shape selected before */
+    if (opts && opts.focus === false) {
+      E.setSel(pos, sel2 || pos, { noDom: true });
+      /* an edit just before (Replace) left the page's own selection behind: it would show, and typing would go there */
+      const s = window.getSelection();
+      if (s.rangeCount && LY.root && LY.root.contains(s.anchorNode)) s.removeAllRanges();
+      E.scrollToCaret(true);
+      E.drawSel(true);
+      return;
+    }
     E.setSel(pos, sel2 || pos);
     E.focus();
   };
@@ -1001,6 +1044,7 @@
   };
   A.contextMenu = function (e) {
     e.preventDefault();
+    if (!E.objSel) E.syncSel();   /* the press moved the caret, but 'selectionchange' comes after this */
     const inTable = L.tables && L.tables.inTable();
     const items = ['cut', 'copy', 'paste', '-'];
     if (E.objSel) items.push({ label: 'Text W&rapping', sub: () => A.wrapItems() }, 'formatObject', '-');
@@ -1151,12 +1195,14 @@
   function setupSplitters() {
     const sp = L.$('#split-map');
     sp.addEventListener('pointerdown', (e) => {
+      if (e.button !== 0) return;
       e.preventDefault();
-      sp.setPointerCapture(e.pointerId);
-      const x0 = e.clientX, w0 = L.$('#docmap').offsetWidth;
-      const mv = (ev) => { L.$('#docmap').style.width = L.clamp(w0 + ev.clientX - x0, 100, 480) + 'px'; };
-      const up = () => { sp.removeEventListener('pointermove', mv); sp.removeEventListener('pointerup', up); LY.fitSizer(); };
-      sp.addEventListener('pointermove', mv); sp.addEventListener('pointerup', up);
+      const map = L.$('#docmap'), w0 = map.offsetWidth, style0 = map.style.width;
+      ui.drag(e, {
+        move: (ev, d) => { map.style.width = L.clamp(w0 + d.dx, 100, 480) + 'px'; },
+        up: (ev, d) => { if (d.moved) LY.fitSizer(); },
+        cancel: () => { map.style.width = style0; },
+      });
     });
   }
 

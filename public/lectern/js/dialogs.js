@@ -561,7 +561,7 @@
     const sel = ui.select(M.SLIDE_SIZES.map((s) => [s.key, s.name]), cur.key, (k) => { const s = M.SLIDE_SIZES.find((x) => x.key === k); if (k !== 'custom') { w.set(IN(s.w)); hh.set(IN(s.h)); } });
     const first = ui.spin({ value: p.firstNum || 1, min: 0, max: 9999, step: 1, dec: 0 });
     let portrait = p.H > p.W;
-    const dflt = L.app.opts.slideSize;
+    const dflt = L.app.opts.slideSize || M.DEFAULT_SIZE;
     const asDefault = ui.check('&Use for new presentations', !!(dflt && Math.abs(dflt.w - p.W) < 0.6 && Math.abs(dflt.h - p.H) < 0.6));
     const body = h('div', { class: 'row' },
       h('div', { class: 'col' }, ui.field('&Slides sized for:', sel, { cls: 'wide' }), ui.field('&Width:', w, { cls: 'wide' }), ui.field('H&eight:', hh, { cls: 'wide' }), ui.field('&Number slides from:', first, { cls: 'wide' }), asDefault),

@@ -219,6 +219,10 @@
 .gobj-t { position: absolute; inset: 0; padding: 3px 6px; overflow: hidden; white-space: pre-wrap; overflow-wrap: break-word; font: 10pt Arial, Arimo, sans-serif; color: #000; display: flex; flex-direction: column; outline: none; }
 .gobj-t.v-ctr { justify-content: center; } .gobj-t.v-b { justify-content: flex-end; }
 .gobj.editing .gobj-t { cursor: text; user-select: text; -webkit-user-select: text; }
+/* a text box: its text takes a caret (the text cursor); a band along its edge moves it (the move cursor) */
+.gobj.txbox .gobj-t { cursor: text; }
+.gobj.txbox:not(.editing)::after { content: ''; position: absolute; inset: 0; cursor: move;
+  clip-path: polygon(evenodd, 0 0, 100% 0, 100% 100%, 0 100%, 0 0, 4px 4px, 4px calc(100% - 4px), calc(100% - 4px) calc(100% - 4px), calc(100% - 4px) 4px, 4px 4px); }
 .gobj-hs { position: absolute; inset: 0; pointer-events: none; }
 .gobj-h { position: absolute; width: 7px; height: 7px; margin: -4px 0 0 -4px; background: #fff; border: 1px solid #000; border-radius: 50%; pointer-events: auto; z-index: 3; }
 .gobj.chart .gobj-h { border-radius: 0; background: #000; }

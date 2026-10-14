@@ -115,9 +115,12 @@
   /* ---------- run CSS ---------- */
   const rcssCache = new Map();
   R.clearCaches = () => rcssCache.clear();
-  /** CSS for resolved run properties. lineMult: line spacing multiple (auto rule) or null for exact */
+  /** CSS for resolved run properties. lineMult: line spacing multiple (auto rule), null for exact, or on a document line
+      grid {grid, mult, line}: the paragraph's line (line px) sizes the line, and a run whose text needs more pitches
+      takes its own grid line (R.gridLine); a run that fits keeps its single line height, well inside the paragraph's,
+      as runs of other fonts (a bullet, a fallback font) sitting on the same baseline would otherwise make it taller */
   R.runCSS = function (r, lineMult, opts) {
-    const key = JSON.stringify(r) + '|' + lineMult + '|' + (opts ? opts.key : '');
+    const key = JSON.stringify(r) + '|' + (lineMult && lineMult.grid ? [lineMult.grid, lineMult.mult, lineMult.line] : lineMult) + '|' + (opts ? opts.key : '');
     let css = rcssCache.get(key);
     if (css != null) return css;
     const s = [];
@@ -129,6 +132,7 @@
     /* superscript/subscript text is raised or lowered inside the line Word has already sized: it must not
        stretch the line (a footnote reference would otherwise push its line down a few pixels) */
     if (vert === 'superscript' || vert === 'subscript') s.push('line-height:0');
+    else if (lineMult && lineMult.grid) { const g = R.gridLine(lineMult.grid, lineMult.mult, sz, r.font); s.push(g > lineMult.line ? `line-height:${g}px` : `line-height:${R.lineFactor(r.font)}`); }
     else if (lineMult != null) s.push(`line-height:${L.round(R.lineFactor(r.font) * lineMult * (fsz < sz ? sz / fsz : 1), 4)}`);
     if (r.b) s.push('font-weight:bold');
     if (r.i) s.push('font-style:italic');
@@ -176,6 +180,10 @@
     if (sp.rule === 'atLeast' && sp.line) return { atLeast: R.px(sp.line), mult: 1 };
     return { mult: sp.line && sp.rule !== 'exact' && sp.rule !== 'atLeast' ? sp.line : 1 };
   };
+  /** a line's height on a document line grid, in px (pitch in px, font size in pt): the pitch times the spacing
+      multiple, and at least the whole pitches the text needs. As Word draws them: 1.5 lines on a 15.6pt grid are 23.4pt,
+      and 14pt text at 1.7 lines takes two pitches, 31.2pt (issue 11; tests/from-issues/11/) */
+  R.gridLine = (pitch, mult, sz, font) => L.round(pitch * Math.max(1, mult, Math.ceil(R.px(sz * R.lineFactor(font)) / pitch - 0.02)), 3);
   const ALIGN = { left: 'left', start: 'left', center: 'center', right: 'right', end: 'right', both: 'justify', distribute: 'justify', lowKashida: 'justify', mediumKashida: 'justify', highKashida: 'justify', thaiDistribute: 'justify' };
 
   /**
@@ -236,9 +244,9 @@
     if (jc !== 'left') st.push(`text-align:${jc}`);
     if (jc === 'justify' && (!last || pPr.jc === 'distribute')) st.push('text-align-last:' + (pPr.jc === 'distribute' ? 'justify' : 'justify'));
     if (jc === 'justify' && !last) outer.classList.add('jl');
-    /* document grid (lines): a line takes whole grid pitches, times the spacing multiple */
+    /* document grid (lines): R.gridLine */
     const gridPx = ctx.grid && !pPr.noSnap && !ls.exact && !ls.atLeast ? ctx.grid : 0;
-    const gridLine = (rr) => { const nat = R.px((rr.sz || 12) * R.lineFactor(rr.font)); return L.round(gridPx * Math.max(1, Math.ceil(nat / gridPx - 0.02)) * (ls.mult || 1), 3); };
+    const gridLine = (rr) => R.gridLine(gridPx, ls.mult || 1, rr.sz || 12, rr.font);
     /* line height strut from the first text run (Word sizes lines by their content, not the mark) */
     const firstText = p.runs.find((it) => it.t === 'text' && it.text && !(it.rPr && it.rPr.hidden && !ctx.showHidden) && !(it.rPr && it.rPr.del && ctx.markup === 'final'));
     const strutR = firstText ? D.rProps(d, p, firstText, tctx) : markR;
@@ -249,6 +257,8 @@
     else if (ls.atLeast) st.push(`line-height:${Math.max(ls.atLeast, R.px((strutR.sz || 12) * R.lineFactor(strutR.font)))}px`);
     else if (gridPx) st.push(`line-height:${gridLine(strutR)}px`);
     else st.push(`line-height:${L.round(R.lineFactor(strutR.font) * ls.mult, 4)}`);
+    const runLine = gridPx ? { grid: gridPx, mult: ls.mult || 1, line: gridLine(strutR) } : ls.mult != null && !ls.exact ? ls.mult : null;
+    if (gridPx) pc.dataset.grid = runLine.line;   /* the line's box when measured (LY.lines): runs that fit are shorter */
     /* borders & shading, grouped with identical neighbours */
     const bd = pPr.borders;
     const shd = pPr.shd ? R.shadeCSS(pPr.shd) : '';
@@ -295,7 +305,7 @@
         if (lv.fmt === 'bullet') { text = lb.text; if (lv.picture && L.media.has(lv.picture)) text = ''; }
         span.textContent = text;
         if (lv.fmt === 'bullet' && lv.rPr && /symbol|wingdings/i.test(lv.rPr.font || '')) lr.font = 'Arial';
-        span.style.cssText = R.runCSS(lr, ls.mult != null && !ls.exact ? ls.mult : null);
+        span.style.cssText = R.runCSS(lr, runLine);
         if (lv.picture && L.media.has(lv.picture)) { const im = document.createElement('img'); im.src = L.media.url(lv.picture); im.style.cssText = 'height:0.75em;vertical-align:baseline'; span.appendChild(im); }
         pc.appendChild(span);
         if (lv.suff !== 'nothing') {
@@ -309,7 +319,7 @@
         if (lv.jc === 'right' || lv.jc === 'center') span.dataset.jc = lv.jc;
       }
     }
-    R.fillRuns(pc, p, from, to, ctx, pPr, ls, tctx);
+    R.fillRuns(pc, p, from, to, ctx, pPr, ls, tctx, runLine);
     /* empty fragment or a trailing line break needs a filler so the line has height */
     const lastEl = pc.lastChild;
     if (!pc.querySelector('[data-o]:not(.zw)') && !pc.querySelector('.lbl')) {
@@ -346,9 +356,9 @@
   };
 
   /** fill a paragraph content element with spans for items in [from,to) */
-  R.fillRuns = function (pc, p, from, to, ctx, pPr, ls, tctx) {
+  R.fillRuns = function (pc, p, from, to, ctx, pPr, ls, tctx, runLine) {
     const d = ctx.doc;
-    const mult = ls.exact ? null : ls.atLeast ? 1 : ls.mult;
+    const mult = ls.exact ? null : ls.atLeast ? 1 : runLine && runLine.grid ? runLine : ls.mult;
     let pos = 0;
     let maxTextSz; /* largest size of runs with visible text (computed when first needed) */
     const open = ctx.openCmts ? new Set(ctx.openCmts) : new Set();

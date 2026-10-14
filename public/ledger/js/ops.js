@@ -12,6 +12,7 @@
   /** run fn inside one undoable step; recalculates what changed afterwards */
   O.tx = function (wb, label, fn) {
     const outer = changes == null;
+    if (outer && L.ui && L.ui.dragging && L.ui.dragging()) L.ui.dragCancel();   // an edit in the middle of a drag: the drag ends first, so its step can't be recorded around this one
     const pivots = outer && L.pivots?.begin(wb);
     if (outer) { changes = []; structural = false; }
     wb.undo.begin(label);

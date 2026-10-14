@@ -1,0 +1,12 @@
+# VibeOffice's own stand-in for the option-ext crate (MPL-2.0), which dirs-sys depends on: the one method it uses,
+# written here from that use. Put in its place by [patch.crates-io] in desktop/Cargo.toml (AGENTS.md, Code from
+# other projects: no MPL code in what ships).
+[package]
+name = "option-ext"
+version = "0.2.0"
+edition = "2021"
+license = "Apache-2.0"
+publish = false
+
+[lib]
+path = "src/lib.rs"

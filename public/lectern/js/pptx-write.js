@@ -29,7 +29,6 @@
   };
   const HEAD = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n';
   const NSDECL = `xmlns:a="${NS_A}" xmlns:r="${NS_R}" xmlns:p="${NS_P}"`;
-  const guid = () => '{' + 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => { const r = (Math.random() * 16) | 0; return (c === 'x' ? r : (r & 0x3) | 0x8).toString(16).toUpperCase(); }) + '}';
   const pct = (v) => Math.round((v || 0) * 1000); /* % → 1/1000 % */
 
   const Rels = K.Rels;
@@ -194,7 +193,7 @@
       x += pPrXML(p.pp || {}, 'a:pPr', p.lvl || 0, ctx, design, false) || '';
       for (const r of p.rs) {
         const props = L.txt.runProps(r);
-        if (r.fld) { x += `<a:fld id="${ctx.fieldId ? ctx.fieldId() : guid()}" type="${X(r.fld)}">${rPrXML(props, 'a:rPr', ctx, design)}<a:t>${X(r.t || '')}</a:t></a:fld>`; continue; }
+        if (r.fld) { x += `<a:fld id="${ctx.fieldId ? ctx.fieldId() : K.guid()}" type="${X(r.fld)}">${rPrXML(props, 'a:rPr', ctx, design)}<a:t>${X(r.t || '')}</a:t></a:fld>`; continue; }
         const parts = String(r.t).split('\n');
         parts.forEach((t, i) => {
           if (i) x += `<a:br>${rPrXML(Object.assign({}, props, { link: undefined }), 'a:rPr', ctx, design)}</a:br>`;

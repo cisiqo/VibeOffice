@@ -7,6 +7,7 @@
   const A = () => L.app;
 
   DT.start = function (opts) {
+    L.ui.dragCancel();   /* a tool switch ends a drag in progress */
     if (A().view !== 'print') A().setView('print');
     DT.active = opts;
     const sc = L.$('#scroller');
@@ -54,12 +55,11 @@
       } else ghost.style.cssText = `left:${Math.min(x0, x1) - sr.left + sc.scrollLeft}px;top:${Math.min(y0, y1) - sr.top + sc.scrollTop}px;width:${Math.abs(x1 - x0)}px;height:${Math.abs(y1 - y0)}px;${opts.geom === 'ellipse' ? 'border-radius:50%' : ''}`;
     };
     upd(e);
-    const mv = (ev) => upd(ev);
-    const up = (ev) => {
-      window.removeEventListener('pointermove', mv, true);
-      window.removeEventListener('pointerup', up, true);
+    L.ui.drag(e, { move: (ev) => upd(ev), up, cancel: (d, why) => { ghost.remove(); if (why === 'esc') DT.stop(); }, capture: sc });
+    /* the release draws the shape; a click that never moved puts one of the default size there */
+    function up(ev, d) {
       ghost.remove();
-      upd(ev);
+      if (d.moved) upd(ev); else { x1 = x0; y1 = y0; }
       let w = Math.abs(x1 - x0) * k, hh = Math.abs(y1 - y0) * k;
       const small = w < 3 && hh < 3;
       if (small) { if (opts.line) { w = 72; hh = 0; x1 = x0 + 72 / k; y1 = y0; } else { w = opts.textbox ? 144 : 72; hh = opts.textbox ? 72 : 72; } }
@@ -87,9 +87,7 @@
         const wrap = Array.from(LY.root.querySelectorAll('.flt')).find((x) => x._item === it || (+x.dataset.pid === anc.p.id && +x.dataset.o === anc.o));
         if (wrap) L.drawing.select(wrap, { p: anc.p, o: anc.o });
       }, 30);
-    };
-    window.addEventListener('pointermove', mv, true);
-    window.addEventListener('pointerup', up, true);
+    }
   }
   L.bus.on('app-ready', () => {
     LY.scroller.addEventListener('pointerdown', onDown, true);

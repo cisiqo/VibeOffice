@@ -216,11 +216,17 @@
       else kind = 'newtab';
     }
     const startPos = mk ? +mk.dataset.pos : null;
-    const mv = (ev) => { placeGuide(gl, ev.clientX); if (mk) mk.style.left = ev.clientX - st.hr.left - (kind === 'tab' ? 1 : 0) + 'px'; };
-    const up = (ev) => {
-      window.removeEventListener('pointermove', mv, true);
-      window.removeEventListener('pointerup', up, true);
+    /* a click on the ruler's text area sets a tab stop (or the indent the selector shows); a click on a marker or a
+       margin changes nothing, only a drag moves them */
+    const clickSets = !mk && (kind === 'newtab' || kind === 'first' || kind === 'hang');
+    L.ui.drag(e, {
+      move: (ev) => { placeGuide(gl, ev.clientX); if (mk) mk.style.left = ev.clientX - st.hr.left - (kind === 'tab' ? 1 : 0) + 'px'; },
+      up,
+      cancel: () => { gl.remove(); if (mk) RU.draw(); },
+    });
+    function up(ev, d) {
       gl.remove();
+      if (!d.moved && !clickSets) return;
       const pt = snap(toPt(ev.clientX), ev.altKey);
       const off = ev.clientY > st.hr.bottom + 18 || ev.clientY < st.hr.top - 18;
       switch (kind) {
@@ -272,9 +278,7 @@
         default: break;
       }
       RU.draw();
-    };
-    window.addEventListener('pointermove', mv, true);
-    window.addEventListener('pointerup', up, true);
+    }
   }
   function onVDown(e) {
     if (!state || !state.v || e.button !== 0 || E.readOnly) return;
@@ -289,18 +293,17 @@
     sc.appendChild(gl);
     const place = (cy) => { const sr = sc.getBoundingClientRect(); gl.style.cssText = `top:${cy - sr.top + sc.scrollTop}px;left:${sc.scrollLeft}px;width:${sc.clientWidth}px;height:0;border-left:0;border-top:1px dotted #000`; };
     place(e.clientY);
-    const mv = (ev) => place(ev.clientY);
-    const up = (ev) => {
-      window.removeEventListener('pointermove', mv, true);
-      window.removeEventListener('pointerup', up, true);
-      gl.remove();
-      const dy = (ev.clientY - y0) / state.pxPt;
-      if (Math.abs(dy) < 0.5) return;
-      const s = L.app.curSect();
-      E.edit('Page Setup', () => { D.touchKey(s.holder, s.key); const sect = s.holder === doc() ? doc().sect : s.holder.sect; if (which === 'mt') sect.mt = L.round(Math.max(0, sect.mt + dy), 2); else sect.mb = L.round(Math.max(0, sect.mb - dy), 2); return E.sel; });
-    };
-    window.addEventListener('pointermove', mv, true);
-    window.addEventListener('pointerup', up, true);
+    L.ui.drag(e, {
+      move: (ev) => place(ev.clientY),
+      up(ev, d) {
+        gl.remove();
+        const dy = (ev.clientY - y0) / state.pxPt;
+        if (!d.moved || Math.abs(dy) < 0.5) return;
+        const s = L.app.curSect();
+        E.edit('Page Setup', () => { D.touchKey(s.holder, s.key); const sect = s.holder === doc() ? doc().sect : s.holder.sect; if (which === 'mt') sect.mt = L.round(Math.max(0, sect.mt + dy), 2); else sect.mb = L.round(Math.max(0, sect.mb - dy), 2); return E.sel; });
+      },
+      cancel: () => gl.remove(),
+    });
   }
   RU.tabKind = () => TAB_KINDS[tabKind][0];
 })();

@@ -47,9 +47,16 @@
     const box = h('div', { class: 'thumbs', role: 'listbox', 'aria-label': 'Slides' });
     const w = thumbWidth();
     pres.slides.forEach((s, i) => box.appendChild(thumbItem(s, i, w)));
-    L.clear(LP.body).appendChild(box);
+    keepFocus(() => L.clear(LP.body).appendChild(box));
     LP.list = box;
     scrollCur();
+  }
+  /** the pane drawn again (a slide deleted, moved, added) keeps the keyboard when it had it: the focused thumbnail
+      goes with the old list, and the next Delete or arrow must still work on slides (P4) */
+  function keepFocus(fn) {
+    const had = LP.body.contains(document.activeElement) || (L.app && L.app.focusArea === 'slides');
+    fn();
+    if (had && !LP.body.contains(document.activeElement)) { try { LP.body.focus({ preventScroll: true }); } catch (e) { /* ignore */ } L.app.focusArea = 'slides'; }
   }
   function thumbItem(s, i, w) {
     const sel = L.app.slideSel;
@@ -57,7 +64,7 @@
     const meta = h('div', { class: 'th-meta' }, h('span', { class: 'th-num', text: String(i + (L.pres.firstNum || 1)) }));
     if ((s.trans && s.trans.type && s.trans.type !== 'none') || (s.anims && s.anims.length)) {
       const star = h('span', { class: 'th-star', 'data-tip': 'Play animations', html: '<svg width="12" height="12" viewBox="0 0 12 12"><path d="M6 .8l1.5 3.2 3.4.4-2.5 2.3.7 3.4L6 8.4 2.9 10.1l.7-3.4L1.1 4.4l3.4-.4z" fill="none" stroke="#333"/></svg>' });
-      star.addEventListener('click', (e) => { e.stopPropagation(); const fr = it.querySelector('.th-frame'); L.show.previewTransition(fr, L.pres, s, L.pres.slides[i - 1]); });
+      star.addEventListener('click', (e) => { e.stopPropagation(); const fr = (e.currentTarget.closest('.th') || it).querySelector('.th-frame');   /* the thumbnail shown: refreshThumb moves the star into it */ L.show.previewTransition(fr, L.pres, s, L.pres.slides[i - 1]); });
       meta.appendChild(star);
     }
     const frame = h('button', { class: 'th-frame', type: 'button', 'aria-label': `Slide ${i + 1}` });
@@ -77,7 +84,11 @@
     const s = L.pres.slides[i];
     const old = LP.list.querySelector(`.th[data-i="${i}"]`);
     if (!s || !old) { renderThumbs(); return; }
-    old.replaceWith(thumbItem(s, i, thumbWidth()));
+    /* in place: the thumbnail's elements stay, so a press on it in the meantime still gets its click (P4) */
+    const fresh = thumbItem(s, i, thumbWidth());
+    old.className = fresh.className;
+    old.querySelector('.th-meta').replaceWith(fresh.querySelector('.th-meta'));
+    old.querySelector('.th-frame').replaceChildren(...fresh.querySelector('.th-frame').childNodes);
   };
   LP.markCurrent = function () {
     if (!LP.list) return;
@@ -86,6 +97,8 @@
   };
   function onThumbDown(e, i) {
     if (e.button !== 0) return;
+    /* the Slides pane takes the keyboard: text editing on the slide ends, even on the current slide's thumbnail (P3) */
+    if (E().editing()) L.te.end();
     LP.body.focus({ preventScroll: true });
     L.app.focusArea = 'slides';
     const sel = L.app.slideSel;
@@ -95,14 +108,15 @@
     if (E().idx !== i || L.app.view !== 'normal') E().goto(i);
     LP.markCurrent();
     if (E().readOnly) return;
-    /* drag to reorder */
-    const y0 = e.clientY;
+    /* drag to reorder (common/ui.js ui.drag: Esc, a second button or a release the page never saw cancel it) */
     let line = null, target = null;
     const mv = (ev) => {
-      if (!line && Math.abs(ev.clientY - y0) < 6) return;
       if (!line) { line = h('div', { class: 'drop-line' }); LP.body.appendChild(line); }
       const items = L.$$('.th', LP.list);
       const br = LP.body.getBoundingClientRect();
+      /* let go outside the pane (over the slide), the slides stay where they are */
+      if (ev.clientX < br.left || ev.clientX > br.right) { line.style.display = 'none'; target = null; return; }
+      line.style.display = '';
       target = items.length;
       for (let k = 0; k < items.length; k++) { const r = items[k].getBoundingClientRect(); if (ev.clientY < r.top + r.height / 2) { target = k; break; } }
       const ref = items[target] || items[items.length - 1];
@@ -110,11 +124,12 @@
       line.style.top = (target < items.length ? rr.top - 5 : rr.bottom + 4) - br.top + LP.body.scrollTop + 'px';
       if (ev.clientY < br.top + 20) LP.body.scrollTop -= 8; else if (ev.clientY > br.bottom - 20) LP.body.scrollTop += 8;
     };
-    const up = () => {
-      window.removeEventListener('pointermove', mv); window.removeEventListener('pointerup', up);
-      if (line) { line.remove(); if (target != null) L.app.moveSlides(Array.from(L.app.slideSel).sort((a, b) => a - b), target); }
-    };
-    window.addEventListener('pointermove', mv); window.addEventListener('pointerup', up);
+    L.ui.drag(e, {
+      threshold: 6,
+      move: mv,
+      up() { if (line) { line.remove(); if (target != null) L.app.moveSlides(Array.from(L.app.slideSel).sort((a, b) => a - b), target); } },
+      cancel() { if (line) line.remove(); },
+    });
   }
   function renderMasterThumbs() {
     const box = h('div', { class: 'thumbs' });
@@ -337,10 +352,9 @@
     if (!sel.has(i)) L.app.slideSel = new Set([i]);
     E().idx = i;
     SO.mark();
-    const x0 = e.clientX, y0 = e.clientY;
+    /* drag to reorder (common/ui.js ui.drag) */
     let marker = null, target = null;
     const mv = (ev) => {
-      if (!marker && Math.hypot(ev.clientX - x0, ev.clientY - y0) < 6) return;
       if (!marker) { marker = h('div', { style: 'position:absolute;width:3px;background:#000;pointer-events:none;z-index:5' }); SO.el.appendChild(marker); }
       const items = L.$$('.so-it', SO.el);
       target = items.length;
@@ -356,11 +370,12 @@
       marker.style.top = rr.top - br.top + SO.el.scrollTop + 'px';
       marker.style.height = rr.height + 'px';
     };
-    const up = () => {
-      window.removeEventListener('pointermove', mv); window.removeEventListener('pointerup', up);
-      if (marker) { marker.remove(); if (target != null) L.app.moveSlides(Array.from(L.app.slideSel).sort((a, b) => a - b), target); }
-    };
-    window.addEventListener('pointermove', mv); window.addEventListener('pointerup', up);
+    L.ui.drag(e, {
+      threshold: 6,
+      move: mv,
+      up() { if (marker) { marker.remove(); if (target != null) L.app.moveSlides(Array.from(L.app.slideSel).sort((a, b) => a - b), target); } },
+      cancel() { if (marker) marker.remove(); },
+    });
     void it;
   }
 
@@ -606,10 +621,12 @@
   });
 
   /* --- Slide Layout --- */
+  /** a layout's picture, in the presentation's shape */
   function layoutSVG(key, w) {
-    const d = L.model.buildDesign('default', 720, 540);
+    const W = L.pres ? L.pres.W : M.DEFAULT_SIZE.w, H = L.pres ? L.pres.H : M.DEFAULT_SIZE.h;
+    const d = L.model.buildDesign('default', W, H);
     const frames = M.layoutFrames(key, d);
-    const k = w / 720, hh = 540 * k;
+    const k = w / W, hh = H * k;
     let body = '';
     for (const f of frames) {
       const x = f.x * k, y = f.y * k, fw = f.w * k, fh = f.h * k;

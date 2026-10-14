@@ -1,5 +1,9 @@
 /* Ledger — function catalogue for Insert Function, Function Arguments and the formula ScreenTips.
- * Format per line: NAME|arg1;arg2;[optional];more...|Description */
+ * Format per line: NAME|arg1;arg2;[optional];more...|Description
+ *
+ * Derived from Microsoft VBA documentation (github.com/MicrosoftDocs/VBA-Docs, the Excel WorksheetFunction pages;
+ * Creative Commons Attribution 4.0, (c) Microsoft Corporation; common/licenses/microsoft-vba-docs-LICENSE.txt):
+ * the descriptions and the argument help follow its text, in places shortened or adapted to Ledger. */
 (function (root) {
   'use strict';
   const L = root.L;
